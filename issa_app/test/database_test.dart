@@ -197,4 +197,26 @@ void main() {
     summaries = await invDao.watchInventorySummaries().first;
     expect(summaries.first.totalQuantity, 6.0);
   });
+
+  test('watchInventorySummaries with product that has NO batches', () async {
+    await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Empty Product')),
+    );
+    final summaries = await invDao.watchInventorySummaries().first;
+    expect(summaries.length, 1);
+    expect(summaries.first.totalQuantity, 0.0);
+    expect(summaries.first.latestCostPrice, 0.0);
+  });
+
+  test('schema v1 database without migration running', () async {
+    await db.customStatement('DROP TABLE products;');
+    await db.customStatement(
+        'CREATE TABLE products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);');
+    await db.customStatement(
+        "INSERT INTO products (name, created_at) VALUES ('Old Prod', 123456);");
+
+    // Now call watchInventorySummaries()
+    final summaries = await invDao.watchInventorySummaries().first;
+    expect(summaries.length, 1);
+  });
 }

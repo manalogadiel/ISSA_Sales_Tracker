@@ -17,7 +17,7 @@ class Products extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 100)();
   RealColumn get sellingPrice =>
-      real().withDefault(const Constant(0.0))();
+      real().withDefault(const Constant(0.0)).nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -329,8 +329,29 @@ class AppDatabase extends _$AppDatabase {
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
-            await m.addColumn(products, products.sellingPrice);
+            try {
+              await m.addColumn(products, products.sellingPrice);
+            } catch (_) {}
+            try {
+              await customStatement(
+                  'UPDATE products SET selling_price = 0.0 WHERE selling_price IS NULL;');
+            } catch (_) {}
           }
         },
+        beforeOpen: (details) async {
+          await customStatement('PRAGMA foreign_keys = ON;');
+          try {
+            await customStatement(
+                'ALTER TABLE products ADD COLUMN selling_price REAL DEFAULT 0.0;');
+          } catch (_) {}
+          try {
+            await customStatement(
+                'UPDATE products SET selling_price = 0.0 WHERE selling_price IS NULL;');
+          } catch (_) {}
+        },
       );
+}
+
+extension ProductSafeSellingPrice on Product {
+  double get effectiveSellingPrice => sellingPrice ?? 0.0;
 }
