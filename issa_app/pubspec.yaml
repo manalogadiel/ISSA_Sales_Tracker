@@ -1,0 +1,45 @@
+name: issa_app
+description: "ISSA — Offline sales tracker for a small retail/reselling business."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Database
+  drift: ^2.23.1
+  sqlite3_flutter_libs: ^0.5.28
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # OCR (on-device, offline)
+  google_mlkit_text_recognition: ^0.15.0
+
+  # Charts
+  fl_chart: ^0.70.0
+
+  # Image picking
+  image_picker: ^1.1.2
+
+  # UI helpers
+  intl: ^0.20.1
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.23.1
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
