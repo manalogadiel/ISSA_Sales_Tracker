@@ -1218,7 +1218,8 @@ Future<void> _showEditCardValueDialog(
             Navigator.pop(ctx);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('$title updated to ${formatPeso(parsedVal ?? autoValue)}'),
+                content: Text(
+                    '$title updated to ${formatPeso(parsedVal ?? autoValue)}'),
                 backgroundColor: AppColors.success,
               ),
             );
@@ -1228,7 +1229,6 @@ Future<void> _showEditCardValueDialog(
       ],
     ),
   );
-}  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1331,56 +1331,143 @@ class _OverviewTab extends ConsumerWidget {
 
           // Capital tile
           if (settings.showCapitalTile) ...[
-            capitalAsync.when(
-              loading: () => _LoadingTile(),
-              error: (e, _) => const _ErrorTile(label: 'Capital'),
-              data: (capital) => StatTile(
-                label: 'Total Capital',
-                value: formatPeso(capital),
-                gradient: AppColors.capitalGradient,
-                icon: Icons.account_balance_wallet_rounded,
-                subtitle: 'Current inventory value',
-              ),
+            Builder(
+              builder: (ctx) {
+                final isManual = settings.manualCapital != null;
+                final displayLabel = settings.capitalTitle ?? 'Total Capital';
+                if (isManual) {
+                  return StatTile(
+                    label: displayLabel,
+                    value: formatPeso(settings.manualCapital!),
+                    gradient: AppColors.capitalGradient,
+                    icon: Icons.account_balance_wallet_rounded,
+                    subtitle: 'Manual override (Tap to edit)',
+                    isManual: true,
+                    onEdit: () =>
+                        _showEditCardValueDialog(context, ref, 'capital'),
+                    onTap: () =>
+                        _showEditCardValueDialog(context, ref, 'capital'),
+                  );
+                }
+                return capitalAsync.when(
+                  loading: () => _LoadingTile(),
+                  error: (e, _) => const _ErrorTile(label: 'Capital'),
+                  data: (capital) => StatTile(
+                    label: displayLabel,
+                    value: formatPeso(capital),
+                    gradient: AppColors.capitalGradient,
+                    icon: Icons.account_balance_wallet_rounded,
+                    subtitle: 'Current inventory value',
+                    isManual: false,
+                    onEdit: () =>
+                        _showEditCardValueDialog(context, ref, 'capital'),
+                    onTap: () =>
+                        _showEditCardValueDialog(context, ref, 'capital'),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 12),
           ],
 
           if (settings.showSoldTile || settings.showProfitTile) ...[
-            statsAsync.when(
-              loading: () => Column(
-                children: [
-                  if (settings.showSoldTile) ...[
-                    _LoadingTile(),
-                    if (settings.showProfitTile) const SizedBox(height: 12),
-                  ],
-                  if (settings.showProfitTile) _LoadingTile(),
-                ],
-              ),
-              error: (e, _) => const _ErrorTile(label: 'Stats'),
-              data: (stats) => Column(
-                children: [
-                  if (settings.showSoldTile) ...[
-                    StatTile(
-                      label: 'Total Sold',
-                      value: formatPeso(stats.totalSold),
-                      gradient: AppColors.soldGradient,
-                      icon: Icons.shopping_bag_rounded,
-                      subtitle: 'All-time revenue',
-                    ),
-                    if (settings.showProfitTile) const SizedBox(height: 12),
-                  ],
-                  if (settings.showProfitTile)
-                    StatTile(
-                      label: 'Total Profit',
-                      value: formatPeso(stats.totalProfit),
-                      gradient: stats.totalProfit >= 0
-                          ? AppColors.profitGradient
-                          : [AppColors.error, const Color(0xFFB23636)],
-                      icon: Icons.trending_up_rounded,
-                      subtitle: 'Based on snapshotted cost prices',
-                    ),
-                ],
-              ),
+            Builder(
+              builder: (ctx) {
+                final isSoldManual = settings.manualSold != null;
+                final isProfitManual = settings.manualProfit != null;
+                final soldLabel = settings.soldTitle ?? 'Total Sold';
+                final profitLabel = settings.profitTitle ?? 'Total Profit';
+
+                return statsAsync.when(
+                  loading: () => Column(
+                    children: [
+                      if (settings.showSoldTile) ...[
+                        if (isSoldManual)
+                          StatTile(
+                            label: soldLabel,
+                            value: formatPeso(settings.manualSold!),
+                            gradient: AppColors.soldGradient,
+                            icon: Icons.shopping_bag_rounded,
+                            subtitle: 'Manual override (Tap to edit)',
+                            isManual: true,
+                            onEdit: () =>
+                                _showEditCardValueDialog(context, ref, 'sold'),
+                            onTap: () =>
+                                _showEditCardValueDialog(context, ref, 'sold'),
+                          )
+                        else
+                          _LoadingTile(),
+                        if (settings.showProfitTile) const SizedBox(height: 12),
+                      ],
+                      if (settings.showProfitTile) ...[
+                        if (isProfitManual)
+                          StatTile(
+                            label: profitLabel,
+                            value: formatPeso(settings.manualProfit!),
+                            gradient: settings.manualProfit! >= 0
+                                ? AppColors.profitGradient
+                                : [AppColors.error, const Color(0xFFB23636)],
+                            icon: Icons.trending_up_rounded,
+                            subtitle: 'Manual override (Tap to edit)',
+                            isManual: true,
+                            onEdit: () => _showEditCardValueDialog(
+                                context, ref, 'profit'),
+                            onTap: () => _showEditCardValueDialog(
+                                context, ref, 'profit'),
+                          )
+                        else
+                          _LoadingTile(),
+                      ],
+                    ],
+                  ),
+                  error: (e, _) => const _ErrorTile(label: 'Stats'),
+                  data: (stats) => Column(
+                    children: [
+                      if (settings.showSoldTile) ...[
+                        StatTile(
+                          label: soldLabel,
+                          value: isSoldManual
+                              ? formatPeso(settings.manualSold!)
+                              : formatPeso(stats.totalSold),
+                          gradient: AppColors.soldGradient,
+                          icon: Icons.shopping_bag_rounded,
+                          subtitle: isSoldManual
+                              ? 'Manual override (Tap to edit)'
+                              : 'All-time revenue',
+                          isManual: isSoldManual,
+                          onEdit: () =>
+                              _showEditCardValueDialog(context, ref, 'sold'),
+                          onTap: () =>
+                              _showEditCardValueDialog(context, ref, 'sold'),
+                        ),
+                        if (settings.showProfitTile) const SizedBox(height: 12),
+                      ],
+                      if (settings.showProfitTile)
+                        StatTile(
+                          label: profitLabel,
+                          value: isProfitManual
+                              ? formatPeso(settings.manualProfit!)
+                              : formatPeso(stats.totalProfit),
+                          gradient: (isProfitManual
+                                      ? settings.manualProfit!
+                                      : stats.totalProfit) >=
+                                  0
+                              ? AppColors.profitGradient
+                              : [AppColors.error, const Color(0xFFB23636)],
+                          icon: Icons.trending_up_rounded,
+                          subtitle: isProfitManual
+                              ? 'Manual override (Tap to edit)'
+                              : 'Based on snapshotted cost prices',
+                          isManual: isProfitManual,
+                          onEdit: () =>
+                              _showEditCardValueDialog(context, ref, 'profit'),
+                          onTap: () =>
+                              _showEditCardValueDialog(context, ref, 'profit'),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 24),
           ],

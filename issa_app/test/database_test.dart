@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
-import 'package:issa_app/db/app_database.dart';
 import 'package:issa_app/widgets/common_widgets.dart';
+import 'package:issa_app/providers/providers.dart';
 
 void main() {
   late AppDatabase db;
@@ -321,5 +321,123 @@ void main() {
 
     remainingBatches = await invDao.batchesForProduct(prodId);
     expect(remainingBatches.first.remainingQuantity, 10.0);
+  });
+
+  test('resetAllBatchQuantities zeroes out remaining quantity and sets capital to 0.0', () async {
+    final prodId = await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Tilapia')),
+    );
+    await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: prodId,
+        quantityAdded: 20.0,
+        remainingQuantity: 20.0,
+        costPrice: 120.0,
+        source: BatchSource.manual,
+      ),
+    );
+
+    var capital = await invDao.totalCapital();
+    expect(capital, 2400.0);
+
+    // Reset batches to 0
+    await invDao.resetAllBatchQuantities();
+
+    capital = await invDao.totalCapital();
+    expect(capital, 0.0);
+
+    final batches = await invDao.batchesForProduct(prodId);
+    expect(batches.first.remainingQuantity, 0.0);
+    expect(batches.first.quantityAdded, 20.0); // Historical initial qty preserved
+  });
+
+  test('clearAllBatches and resetAllData wipe records completely', () async {
+    final prodId = await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Bangus')),
+    );
+    await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: prodId,
+        quantityAdded: 15.0,
+        remainingQuantity: 15.0,
+        costPrice: 180.0,
+        source: BatchSource.manual,
+      ),
+    );
+
+    expect(await invDao.totalCapital(), 2700.0);
+
+    // clearAllBatches
+    await invDao.clearAllBatches();
+    expect(await invDao.totalCapital(), 0.0);
+    final batches = await invDao.batchesForProduct(prodId);
+    expect(batches.isEmpty, isTrue);
+
+    // Product still exists
+    final prod = await invDao.findProductByNameCaseInsensitive('Bangus');
+    expect(prod, isNotNull);
+
+    // Re-add batch and record sale, then resetAllData
+    await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: prodId,
+        quantityAdded: 10.0,
+        remainingQuantity: 10.0,
+        costPrice: 180.0,
+        source: BatchSource.manual,
+      ),
+    );
+    final avail = await invDao.batchesForProduct(prodId);
+    await salesDao.recordSale(
+      productId: prodId,
+      quantitySold: 5.0,
+      sellPrice: 220.0,
+      availableBatches: avail,
+    );
+    expect((await salesDao.watchStats().first).totalSold, 1100.0);
+
+    await invDao.resetAllData();
+    expect(await invDao.totalCapital(), 0.0);
+    expect((await salesDao.watchStats().first).totalSold, 0.0);
+  });
+
+  test('DashboardSettings handles manual overrides and reset states cleanly', () {
+    const defaultSettings = DashboardSettings();
+    expect(defaultSettings.manualCapital, isNull);
+    expect(defaultSettings.manualSold, isNull);
+    expect(defaultSettings.manualProfit, isNull);
+
+    // Custom overrides
+    final overridden = defaultSettings.copyWith(
+      manualCapital: 500.0,
+      manualSold: 1200.0,
+      manualProfit: 350.0,
+      capitalTitle: 'Invested Capital',
+    );
+    expect(overridden.manualCapital, 500.0);
+    expect(overridden.manualSold, 1200.0);
+    expect(overridden.manualProfit, 350.0);
+    expect(overridden.capitalTitle, 'Invested Capital');
+
+    // Clear specific override
+    final cleared = overridden.copyWith(
+      clearManualCapital: true,
+    );
+    expect(cleared.manualCapital, isNull);
+    expect(cleared.manualSold, 1200.0);
+
+    // Test notifier methods
+    final notifier = DashboardSettingsNotifier();
+    notifier.setManualCapital(0.0);
+    notifier.setManualSold(0.0);
+    notifier.setManualProfit(0.0);
+    expect(notifier.state.manualCapital, 0.0);
+    expect(notifier.state.manualSold, 0.0);
+    expect(notifier.state.manualProfit, 0.0);
+
+    notifier.revertAllToAuto();
+    expect(notifier.state.manualCapital, isNull);
+    expect(notifier.state.manualSold, isNull);
+    expect(notifier.state.manualProfit, isNull);
   });
 }
