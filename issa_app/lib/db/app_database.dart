@@ -92,8 +92,17 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<Product>> watchAllProducts() => select(products).watch();
 
-  Future<int> insertProduct(ProductsCompanion companion) =>
-      into(products).insert(companion);
+  Future<int> insertProduct(ProductsCompanion companion) async {
+    try {
+      return await into(products).insert(companion);
+    } catch (_) {
+      try {
+        await customStatement(
+            'ALTER TABLE products ADD COLUMN selling_price REAL DEFAULT 0.0;');
+      } catch (_) {}
+      return await into(products).insert(companion);
+    }
+  }
 
   Future<Product?> findProductByNameCaseInsensitive(String name) async {
     final query = select(products)
@@ -108,10 +117,25 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Future<void> updateProductSellingPrice({
     required int id,
     required double sellingPrice,
-  }) =>
-      (update(products)..where((t) => t.id.equals(id))).write(
+  }) async {
+    try {
+      await (update(products)..where((t) => t.id.equals(id))).write(
         ProductsCompanion(sellingPrice: Value(sellingPrice)),
       );
+    } catch (_) {
+      try {
+        await customStatement(
+            'ALTER TABLE products ADD COLUMN selling_price REAL DEFAULT 0.0;');
+      } catch (_) {}
+      try {
+        await customStatement(
+            'UPDATE products SET selling_price = 0.0 WHERE selling_price IS NULL;');
+      } catch (_) {}
+      await (update(products)..where((t) => t.id.equals(id))).write(
+        ProductsCompanion(sellingPrice: Value(sellingPrice)),
+      );
+    }
+  }
 
   Future<int> salesCountForProduct(int productId) async {
     final list = await (select(sales)..where((t) => t.productId.equals(productId))).get();
@@ -199,6 +223,10 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     ]);
 
     return query.watch().asyncMap((_) async {
+      try {
+        await customStatement(
+            'ALTER TABLE products ADD COLUMN selling_price REAL DEFAULT 0.0;');
+      } catch (_) {}
       try {
         await customStatement(
             'UPDATE products SET selling_price = 0.0 WHERE selling_price IS NULL;');
