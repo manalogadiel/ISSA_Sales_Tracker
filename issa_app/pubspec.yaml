@@ -2,7 +2,7 @@ name: issa_app
 description: "ISSA — Offline sales tracker for a small retail/reselling business."
 publish_to: 'none'
 
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
   sdk: ^3.13.1
