@@ -165,6 +165,10 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     ]);
 
     return query.watch().asyncMap((_) async {
+      try {
+        await customStatement(
+            'UPDATE products SET selling_price = 0.0 WHERE selling_price IS NULL;');
+      } catch (_) {}
       final prods = await (select(products)
             ..orderBy([(t) => OrderingTerm.asc(t.name)]))
           .get();
