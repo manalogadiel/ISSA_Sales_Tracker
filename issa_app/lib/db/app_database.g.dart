@@ -6,6 +6,8 @@ part of 'app_database.dart';
 mixin _$InventoryDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductsTable get products => attachedDatabase.products;
   $CapitalBatchesTable get capitalBatches => attachedDatabase.capitalBatches;
+  $SalesTable get sales => attachedDatabase.sales;
+  $SaleAllocationsTable get saleAllocations => attachedDatabase.saleAllocations;
   InventoryDaoManager get managers => InventoryDaoManager(this);
 }
 
@@ -18,6 +20,13 @@ class InventoryDaoManager {
       $$CapitalBatchesTableTableManager(
         _db.attachedDatabase,
         _db.capitalBatches,
+      );
+  $$SalesTableTableManager get sales =>
+      $$SalesTableTableManager(_db.attachedDatabase, _db.sales);
+  $$SaleAllocationsTableTableManager get saleAllocations =>
+      $$SaleAllocationsTableTableManager(
+        _db.attachedDatabase,
+        _db.saleAllocations,
       );
 }
 

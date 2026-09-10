@@ -77,8 +77,8 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                                     _selectedProduct = s.product;
                                     _quantity = 0.5;
                                     // Auto-fill sell price = set sellingPrice (or fallback to latest cost price)
-                                    final defaultPrice = s.product.sellingPrice > 0
-                                        ? s.product.sellingPrice
+                                    final defaultPrice = s.product.effectiveSellingPrice > 0
+                                        ? s.product.effectiveSellingPrice
                                         : s.latestCostPrice;
                                     _priceCtrl.text =
                                         defaultPrice.toStringAsFixed(2);
@@ -114,7 +114,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                       prefixText: '₱ ',
                       prefixIcon: const Icon(Icons.sell_outlined),
                       helperText: _selectedProduct != null &&
-                              _selectedProduct!.sellingPrice > 0
+                              _selectedProduct!.effectiveSellingPrice > 0
                           ? 'Pre-filled from set selling price — tap to edit'
                           : 'Auto-filled from latest cost price — tap to edit',
                     ),
@@ -278,7 +278,7 @@ class _ProductOption extends StatelessWidget {
                   ),
                   Text(
                     '${formatKg(summary.totalQuantity)} available · '
-                    '${summary.product.sellingPrice > 0 ? "Sell: ${formatPeso(summary.product.sellingPrice)}" : "Cost: ${formatPeso(summary.latestCostPrice)}"}/kg',
+                    '${summary.product.effectiveSellingPrice > 0 ? "Sell: ${formatPeso(summary.product.effectiveSellingPrice)}" : "Cost: ${formatPeso(summary.latestCostPrice)}"}/kg',
                     style: const TextStyle(
                       fontFamily: 'Nunito',
                       fontSize: 12,

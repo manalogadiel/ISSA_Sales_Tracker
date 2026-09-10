@@ -277,11 +277,11 @@ class _FutureMetricsTab extends ConsumerWidget {
           int unsetSellPriceCount = 0;
 
           for (final s in inStockSummaries) {
-            final hasSellPrice = s.product.sellingPrice > 0;
+            final hasSellPrice = s.product.effectiveSellingPrice > 0;
             if (!hasSellPrice) unsetSellPriceCount++;
 
             final effSellPrice =
-                hasSellPrice ? s.product.sellingPrice : s.latestCostPrice;
+                hasSellPrice ? s.product.effectiveSellingPrice : s.latestCostPrice;
             final prodRevenue = s.totalQuantity * effSellPrice;
             final prodCapital = s.batches.fold<double>(
                 0.0, (acc, b) => acc + (b.remainingQuantity * b.costPrice));
@@ -526,9 +526,9 @@ class _FutureMetricsTab extends ConsumerWidget {
               const SizedBox(height: 12),
 
               ...inStockSummaries.map((s) {
-                final hasSellPrice = s.product.sellingPrice > 0;
+                final hasSellPrice = s.product.effectiveSellingPrice > 0;
                 final effSellPrice =
-                    hasSellPrice ? s.product.sellingPrice : s.latestCostPrice;
+                    hasSellPrice ? s.product.effectiveSellingPrice : s.latestCostPrice;
                 final prodRevenue = s.totalQuantity * effSellPrice;
                 final prodCapital = s.batches.fold<double>(
                     0.0, (acc, b) => acc + (b.remainingQuantity * b.costPrice));
@@ -593,7 +593,7 @@ class _FutureMetricsTab extends ConsumerWidget {
                       Row(
                         children: [
                           Text(
-                            'Sell: ${hasSellPrice ? formatPeso(s.product.sellingPrice) : 'Unset'} / kg',
+                            'Sell: ${hasSellPrice ? formatPeso(s.product.effectiveSellingPrice) : 'Unset'} / kg',
                             style: TextStyle(
                               fontFamily: 'Nunito',
                               fontSize: 12,

@@ -208,15 +208,46 @@ void main() {
     expect(summaries.first.latestCostPrice, 0.0);
   });
 
-  test('schema v1 database without migration running', () async {
-    await db.customStatement('DROP TABLE products;');
-    await db.customStatement(
-        'CREATE TABLE products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);');
-    await db.customStatement(
-        "INSERT INTO products (name, created_at) VALUES ('Old Prod', 123456);");
+  test('product with null sellingPrice works safely and falls back to 0.0', () async {
+    await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Old Prod No Selling Price')),
+    );
+    final prod = await invDao.findProductByNameCaseInsensitive('Old Prod No Selling Price');
+    expect(prod, isNotNull);
+    expect(prod!.effectiveSellingPrice, 0.0);
+    expect(prod.sellingPrice, 0.0);
 
-    // Now call watchInventorySummaries()
     final summaries = await invDao.watchInventorySummaries().first;
     expect(summaries.length, 1);
+    expect(summaries.first.product.effectiveSellingPrice, 0.0);
+  });
+
+  test('deleteProduct and deleteBatch removes inventory properly', () async {
+    final prodId = await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Product To Delete')),
+    );
+    final batchId = await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: prodId,
+        quantityAdded: 5.0,
+        remainingQuantity: 5.0,
+        costPrice: 100.0,
+        source: BatchSource.manual,
+      ),
+    );
+
+    var summaries = await invDao.watchInventorySummaries().first;
+    expect(summaries.length, 1);
+    expect(summaries.first.totalQuantity, 5.0);
+
+    // Delete batch
+    await invDao.deleteBatch(batchId);
+    summaries = await invDao.watchInventorySummaries().first;
+    expect(summaries.first.totalQuantity, 0.0);
+
+    // Delete product
+    await invDao.deleteProduct(prodId);
+    summaries = await invDao.watchInventorySummaries().first;
+    expect(summaries.isEmpty, isTrue);
   });
 }

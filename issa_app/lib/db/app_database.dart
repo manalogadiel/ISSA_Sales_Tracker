@@ -85,7 +85,7 @@ class SaleStats {
 // DAOs
 // ────────────────────────────────────────────────────────────────────────────
 
-@DriftAccessor(tables: [Products, CapitalBatches])
+@DriftAccessor(tables: [Products, CapitalBatches, Sales, SaleAllocations])
 class InventoryDao extends DatabaseAccessor<AppDatabase>
     with _$InventoryDaoMixin {
   InventoryDao(super.db);
@@ -113,8 +113,42 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         ProductsCompanion(sellingPrice: Value(sellingPrice)),
       );
 
+  Future<int> salesCountForProduct(int productId) async {
+    final list = await (select(sales)..where((t) => t.productId.equals(productId))).get();
+    return list.length;
+  }
+
   Future<void> deleteProduct(int id) =>
       (delete(products)..where((t) => t.id.equals(id))).go();
+
+  Future<void> deleteProductCascade(int productId) async {
+    await transaction(() async {
+      final productSales = await (select(sales)
+            ..where((t) => t.productId.equals(productId)))
+          .get();
+      for (final s in productSales) {
+        await (delete(sales)..where((t) => t.id.equals(s.id))).go();
+      }
+      await (delete(products)..where((t) => t.id.equals(productId))).go();
+    });
+  }
+
+  Future<int> allocationsCountForBatch(int batchId) async {
+    final list = await (select(saleAllocations)
+          ..where((t) => t.batchId.equals(batchId)))
+        .get();
+    return list.length;
+  }
+
+  Future<void> deleteBatch(int batchId) =>
+      (delete(capitalBatches)..where((t) => t.id.equals(batchId))).go();
+
+  Future<void> deleteBatchCascade(int batchId) async {
+    await transaction(() async {
+      await (delete(saleAllocations)..where((t) => t.batchId.equals(batchId))).go();
+      await (delete(capitalBatches)..where((t) => t.id.equals(batchId))).go();
+    });
+  }
 
   Future<List<CapitalBatch>> batchesForProduct(int productId) =>
       (select(capitalBatches)

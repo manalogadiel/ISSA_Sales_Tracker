@@ -282,7 +282,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                'Sell: ${s.product.sellingPrice > 0 ? formatPeso(s.product.sellingPrice) : 'Unset'} · Cost: ${formatPeso(s.latestCostPrice)}/kg',
+                                'Sell: ${s.product.effectiveSellingPrice > 0 ? formatPeso(s.product.effectiveSellingPrice) : 'Unset'} · Cost: ${formatPeso(s.latestCostPrice)}/kg',
                                 style: Theme.of(context).textTheme.bodySmall,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -295,10 +295,11 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                   // Actions
                   IconButton(
                     icon: const Icon(Icons.sell_outlined),
-                    color: s.product.sellingPrice > 0
+                    color: s.product.effectiveSellingPrice > 0
                         ? AppColors.primaryDeep
                         : AppColors.warning,
                     tooltip: 'Set selling price',
+                    visualDensity: VisualDensity.compact,
                     onPressed: () =>
                         _showEditSellingPriceDialog(context, s.product),
                   ),
@@ -306,8 +307,17 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                     icon: const Icon(Icons.add_box_outlined),
                     color: AppColors.primaryDeep,
                     tooltip: 'Add restock batch',
+                    visualDensity: VisualDensity.compact,
                     onPressed: () =>
                         _showAddBatchDialog(context, s.product.id),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    color: AppColors.error.withAlpha(220),
+                    tooltip: 'Delete product',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () =>
+                        _showDeleteProductDialog(context, s),
                   ),
                   Icon(
                     _expanded
@@ -424,8 +434,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
   Future<void> _showEditSellingPriceDialog(
       BuildContext context, Product product) async {
     final ctrl = TextEditingController(
-      text: product.sellingPrice > 0
-          ? product.sellingPrice.toStringAsFixed(2)
+      text: product.effectiveSellingPrice > 0
+          ? product.effectiveSellingPrice.toStringAsFixed(2)
           : '',
     );
     final formKey = GlobalKey<FormState>();
@@ -474,6 +484,109 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDeleteProductDialog(
+      BuildContext context, InventorySummary s) async {
+    final dao = ref.read(inventoryDaoProvider);
+    final salesCount = await dao.salesCountForProduct(s.product.id);
+
+    if (!context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            SizedBox(width: 8),
+            Text('Delete Product'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete "${s.product.name}"?',
+              style: const TextStyle(
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (s.totalQuantity > 0)
+              Text(
+                '• Current inventory of ${formatKg(s.totalQuantity)} (${s.batches.length} batch${s.batches.length == 1 ? '' : 'es'}) will be removed.',
+                style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            if (salesCount > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withAlpha(25),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.error.withAlpha(80)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 18, color: AppColors.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This product has $salesCount recorded sale${salesCount == 1 ? '' : 's'}. Deleting it will also remove its sales history.',
+                        style: const TextStyle(
+                          fontFamily: 'Nunito',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              if (salesCount > 0) {
+                await dao.deleteProductCascade(s.product.id);
+              } else {
+                await dao.deleteProduct(s.product.id);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"${s.product.name}" deleted from inventory.'),
+                    backgroundColor: AppColors.textPrimary,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -531,15 +644,28 @@ class _BatchTile extends ConsumerWidget {
             color: AppColors.textSecondary,
           ),
         ),
-        trailing: isExhausted
-            ? null
-            : IconButton(
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isExhausted)
+              IconButton(
                 icon: const Icon(Icons.edit_outlined,
                     size: 18, color: AppColors.primaryDeep),
                 tooltip: 'Edit batch',
+                visualDensity: VisualDensity.compact,
                 onPressed: () =>
                     _showEditBatchDialog(context, ref, batch),
               ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded,
+                  size: 18, color: AppColors.error),
+              tooltip: 'Delete batch',
+              visualDensity: VisualDensity.compact,
+              onPressed: () =>
+                  _showDeleteBatchDialog(context, ref, batch),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -640,6 +766,82 @@ class _BatchTile extends ConsumerWidget {
             },
             style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
             child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDeleteBatchDialog(
+      BuildContext context, WidgetRef ref, CapitalBatch batch) async {
+    final dao = ref.read(inventoryDaoProvider);
+    final allocCount = await dao.allocationsCountForBatch(batch.id);
+
+    if (!context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            SizedBox(width: 8),
+            Text('Delete Batch'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Remove this restock batch of ${formatKg(batch.quantityAdded)} (${formatKg(batch.remainingQuantity)} remaining @ ${formatPeso(batch.costPrice)}/kg)?',
+              style: const TextStyle(fontFamily: 'Nunito', fontSize: 14),
+            ),
+            if (allocCount > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.warning.withAlpha(100)),
+                ),
+                child: const Text(
+                  'Note: This batch has been partially or fully sold in past transactions. Deleting it will also remove its associated sale cost allocations.',
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              if (allocCount > 0) {
+                await dao.deleteBatchCascade(batch.id);
+              } else {
+                await dao.deleteBatch(batch.id);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Restock batch removed.')),
+                );
+              }
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
