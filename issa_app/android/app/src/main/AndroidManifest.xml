@@ -6,7 +6,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:label="ISSA"
+        android:label="Issa"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!-- Bundle ML Kit text recognition model for offline use -->
