@@ -104,6 +104,9 @@ class DashboardScreen extends ConsumerWidget {
   Future<void> _showEditDashboardDialog(
       BuildContext context, WidgetRef ref) async {
     final current = ref.read(dashboardSettingsProvider);
+    final statsAsync = ref.read(saleStatsProvider);
+    final capitalAsync = ref.read(totalCapitalProvider);
+
     final titleCtrl = TextEditingController(text: current.welcomeTitle);
     final subtitleCtrl = TextEditingController(text: current.welcomeSubtitle);
     int selectedDays = current.chartDays;
@@ -115,6 +118,33 @@ class DashboardScreen extends ConsumerWidget {
     bool showSales = current.showRecentSales;
     bool showFutureBanner = current.showFutureBanner;
     bool showFutureBreakdown = current.showFutureBreakdown;
+
+    final autoCapital = capitalAsync.asData?.value ?? 0.0;
+    final autoSold = statsAsync.asData?.value.totalSold ?? 0.0;
+    final autoProfit = statsAsync.asData?.value.totalProfit ?? 0.0;
+
+    final capitalOverrideCtrl = TextEditingController(
+      text: current.manualCapital != null
+          ? current.manualCapital!.toStringAsFixed(2)
+          : '',
+    );
+    final soldOverrideCtrl = TextEditingController(
+      text: current.manualSold != null
+          ? current.manualSold!.toStringAsFixed(2)
+          : '',
+    );
+    final profitOverrideCtrl = TextEditingController(
+      text: current.manualProfit != null
+          ? current.manualProfit!.toStringAsFixed(2)
+          : '',
+    );
+
+    final capitalTitleCtrl =
+        TextEditingController(text: current.capitalTitle ?? 'Total Capital');
+    final soldTitleCtrl =
+        TextEditingController(text: current.soldTitle ?? 'Total Sold');
+    final profitTitleCtrl =
+        TextEditingController(text: current.profitTitle ?? 'Total Profit');
 
     await showModalBottomSheet<void>(
       context: context,
@@ -194,7 +224,169 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 20),
 
-                      // Section 2: Chart Days
+                      // Section 2: Manual Card Values & Custom Titles
+                      const SectionHeader(title: 'MANUAL CARD VALUES & TITLES'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Override card amounts manually or customize labels. Leave amount empty for auto calculation.',
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Capital
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: capitalTitleCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Capital Title',
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 4,
+                            child: TextField(
+                              controller: capitalOverrideCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Capital (₱)',
+                                prefixText: '₱ ',
+                                hintText: 'Auto (${formatPeso(autoCapital)})',
+                                isDense: true,
+                                suffixIcon: capitalOverrideCtrl.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 16),
+                                        onPressed: () => setModalState(
+                                            () => capitalOverrideCtrl.clear()),
+                                      )
+                                    : null,
+                              ),
+                              onChanged: (_) => setModalState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      // Sold
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: soldTitleCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Sold Title',
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 4,
+                            child: TextField(
+                              controller: soldOverrideCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Sold (₱)',
+                                prefixText: '₱ ',
+                                hintText: 'Auto (${formatPeso(autoSold)})',
+                                isDense: true,
+                                suffixIcon: soldOverrideCtrl.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 16),
+                                        onPressed: () => setModalState(
+                                            () => soldOverrideCtrl.clear()),
+                                      )
+                                    : null,
+                              ),
+                              onChanged: (_) => setModalState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      // Profit
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: profitTitleCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Profit Title',
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 4,
+                            child: TextField(
+                              controller: profitOverrideCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: InputDecoration(
+                                labelText: 'Profit (₱)',
+                                prefixText: '₱ ',
+                                hintText: 'Auto (${formatPeso(autoProfit)})',
+                                isDense: true,
+                                suffixIcon: profitOverrideCtrl.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 16),
+                                        onPressed: () => setModalState(
+                                            () => profitOverrideCtrl.clear()),
+                                      )
+                                    : null,
+                              ),
+                              onChanged: (_) => setModalState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.exposure_zero_rounded,
+                                size: 16),
+                            label: const Text('Set All to ₱0.00'),
+                            onPressed: () {
+                              setModalState(() {
+                                capitalOverrideCtrl.text = '0.00';
+                                soldOverrideCtrl.text = '0.00';
+                                profitOverrideCtrl.text = '0.00';
+                              });
+                            },
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.auto_mode_rounded, size: 16),
+                            label: const Text('Clear Overrides (Auto)'),
+                            onPressed: () {
+                              setModalState(() {
+                                capitalOverrideCtrl.clear();
+                                soldOverrideCtrl.clear();
+                                profitOverrideCtrl.clear();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Section 3: Profit Chart Timeframe
                       const SectionHeader(title: 'PROFIT CHART TIMEFRAME'),
                       const SizedBox(height: 8),
                       Row(
@@ -209,12 +401,11 @@ class DashboardScreen extends ConsumerWidget {
                                 selected: isSelected,
                                 selectedColor: AppColors.primary,
                                 labelStyle: TextStyle(
-                                  fontFamily: 'Nunito',
-                                  fontWeight: FontWeight.w700,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : AppColors.textPrimary,
-                                ),
+                                    fontFamily: 'Nunito',
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : AppColors.textPrimary),
                                 onSelected: (val) {
                                   if (val) {
                                     setModalState(() => selectedDays = days);
@@ -227,8 +418,8 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 20),
 
-                      // Section 3: Visible Cards (Overview)
-                      const SectionHeader(title: 'OVERVIEW CARDS'),
+                      // Section 4: Visible Cards (Overview)
+                      const SectionHeader(title: 'OVERVIEW CARDS VISIBILITY'),
                       const SizedBox(height: 4),
                       SwitchListTile.adaptive(
                         title: const Text('Welcome Banner',
@@ -298,7 +489,7 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 20),
 
-                      // Section 4: Future Metrics Tab Visibility
+                      // Section 5: Future Metrics Tab Visibility
                       const SectionHeader(title: 'FUTURE METRICS CARDS'),
                       const SizedBox(height: 4),
                       SwitchListTile.adaptive(
@@ -344,6 +535,34 @@ class DashboardScreen extends ConsumerWidget {
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: () {
+                              final manualCap = capitalOverrideCtrl.text
+                                      .trim()
+                                      .isEmpty
+                                  ? null
+                                  : cleanParseNumber(capitalOverrideCtrl.text);
+                              final manualSld =
+                                  soldOverrideCtrl.text.trim().isEmpty
+                                      ? null
+                                      : cleanParseNumber(soldOverrideCtrl.text);
+                              final manualPrf = profitOverrideCtrl.text
+                                      .trim()
+                                      .isEmpty
+                                  ? null
+                                  : cleanParseNumber(profitOverrideCtrl.text);
+
+                              final capTitle =
+                                  capitalTitleCtrl.text.trim().isNotEmpty
+                                      ? capitalTitleCtrl.text.trim()
+                                      : null;
+                              final sldTitle =
+                                  soldTitleCtrl.text.trim().isNotEmpty
+                                      ? soldTitleCtrl.text.trim()
+                                      : null;
+                              final prfTitle =
+                                  profitTitleCtrl.text.trim().isNotEmpty
+                                      ? profitTitleCtrl.text.trim()
+                                      : null;
+
                               ref
                                   .read(dashboardSettingsProvider.notifier)
                                   .updateSettings(
@@ -364,6 +583,12 @@ class DashboardScreen extends ConsumerWidget {
                                       showRecentSales: showSales,
                                       showFutureBanner: showFutureBanner,
                                       showFutureBreakdown: showFutureBreakdown,
+                                      manualCapital: manualCap,
+                                      manualSold: manualSld,
+                                      manualProfit: manualPrf,
+                                      capitalTitle: capTitle,
+                                      soldTitle: sldTitle,
+                                      profitTitle: prfTitle,
                                     ),
                                   );
                               ref.invalidate(dailyProfitsProvider);
@@ -397,6 +622,7 @@ class DashboardScreen extends ConsumerWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: const [
             Icon(Icons.restart_alt_rounded, color: AppColors.error),
@@ -404,82 +630,187 @@ class DashboardScreen extends ConsumerWidget {
             Text('Reset Dashboard'),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Choose what you would like to reset:',
-              style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              elevation: 0,
-              color: AppColors.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: AppColors.divider),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Choose what you would like to reset:',
+                style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
               ),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppColors.accentLight,
-                  child: Icon(Icons.palette_outlined,
-                      color: AppColors.primaryDeep, size: 20),
+              const SizedBox(height: 16),
+
+              // Option 1: Set All Cards to ₱0.00 (Display override)
+              Card(
+                elevation: 0,
+                color: AppColors.accentLight,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.divider),
                 ),
-                title: const Text('Reset Layout & View Settings',
-                    style: TextStyle(
-                        fontFamily: 'Nunito',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14)),
-                subtitle: const Text(
-                    'Restores default cards, greeting, and 30-day chart range.',
-                    style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
-                onTap: () {
-                  ref
-                      .read(dashboardSettingsProvider.notifier)
-                      .resetToDefaults();
-                  ref.invalidate(dailyProfitsProvider);
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          'Dashboard layout and view settings restored to defaults'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 0,
-              color: AppColors.error.withAlpha(15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: AppColors.error.withAlpha(60)),
-              ),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppColors.error.withAlpha(30),
-                  child: const Icon(Icons.delete_forever_rounded,
-                      color: AppColors.error, size: 20),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.primaryDeep,
+                    child: Icon(Icons.exposure_zero_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  title: const Text('Set All Dashboard Cards to ₱0.00',
+                      style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                  subtitle: const Text(
+                      'Instantly sets Total Capital, Sold, and Profit cards to ₱0.00.',
+                      style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                  onTap: () {
+                    ref
+                        .read(dashboardSettingsProvider.notifier)
+                        .resetMetricsToZero();
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('All dashboard cards set to ₱0.00'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  },
                 ),
-                title: const Text('Clear All Sales History',
-                    style: TextStyle(
-                        fontFamily: 'Nunito',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: AppColors.error)),
-                subtitle: const Text(
-                    'Resets sales metrics to 0 and restores all inventory stock.',
-                    style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _confirmClearSalesData(context, ref);
-                },
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+
+              // Option 2: Reset Inventory Capital to ₱0.00 (Database batches)
+              Card(
+                elevation: 0,
+                color: AppColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.divider),
+                ),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFF6B4FB8),
+                    child: Icon(Icons.account_balance_wallet_outlined,
+                        color: Colors.white, size: 20),
+                  ),
+                  title: const Text('Reset Inventory Capital to ₱0.00',
+                      style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                  subtitle: const Text(
+                      'Zeros out all stock batch quantities in database. Capital becomes ₱0.00.',
+                      style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmResetCapitalData(context, ref);
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Option 3: Clear Sales History
+              Card(
+                elevation: 0,
+                color: AppColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.divider),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.error.withAlpha(30),
+                    child: const Icon(Icons.receipt_long_outlined,
+                        color: AppColors.error, size: 20),
+                  ),
+                  title: const Text('Clear All Sales History',
+                      style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.error)),
+                  subtitle: const Text(
+                      'Resets sales metrics to 0 and restores all inventory stock.',
+                      style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmClearSalesData(context, ref);
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Option 4: Full Reset (Wipe Sales & Capital Batches)
+              Card(
+                elevation: 0,
+                color: AppColors.error.withAlpha(15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: AppColors.error.withAlpha(60)),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.error,
+                    child: const Icon(Icons.delete_forever_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  title: const Text('Full Reset (Sales & Batches)',
+                      style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.error)),
+                  subtitle: const Text(
+                      'Wipes all sales records and inventory batches to ₱0.00.',
+                      style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmResetAllData(context, ref);
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Option 5: Revert Overrides & Reset Layout
+              Card(
+                elevation: 0,
+                color: AppColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.divider),
+                ),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.accentLight,
+                    child: Icon(Icons.refresh_rounded,
+                        color: AppColors.primaryDeep, size: 20),
+                  ),
+                  title: const Text('Revert to Auto & Reset Layout',
+                      style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                  subtitle: const Text(
+                      'Removes manual overrides and restores auto database values.',
+                      style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                  onTap: () {
+                    ref
+                        .read(dashboardSettingsProvider.notifier)
+                        .resetToDefaults();
+                    ref.invalidate(dailyProfitsProvider);
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Dashboard layout and metrics restored to auto defaults'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -489,6 +820,65 @@ class DashboardScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmResetCapitalData(
+      BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.inventory_2_outlined, color: Color(0xFF6B4FB8)),
+            SizedBox(width: 8),
+            Text('Reset Inventory Capital?'),
+          ],
+        ),
+        content: const Text(
+          'This will set all inventory batch remaining quantities to 0.0 kg in the database.\n\nTotal Capital will reset to ₱0.00 while preserving your product catalog.\n\nAre you sure you want to proceed?',
+          style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF6B4FB8)),
+            child: const Text('Yes, Reset Capital to ₱0.00'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ref.read(inventoryDaoProvider).resetAllBatchQuantities();
+        ref.read(dashboardSettingsProvider.notifier).setManualCapital(null);
+        ref.invalidate(totalCapitalProvider);
+        ref.invalidate(inventorySummariesProvider);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Inventory capital has been reset to ₱0.00'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error resetting capital: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _confirmClearSalesData(
@@ -524,6 +914,8 @@ class DashboardScreen extends ConsumerWidget {
     if (confirmed == true) {
       try {
         await ref.read(salesDaoProvider).resetAllSales();
+        ref.read(dashboardSettingsProvider.notifier).setManualSold(null);
+        ref.read(dashboardSettingsProvider.notifier).setManualProfit(null);
         ref.invalidate(saleStatsProvider);
         ref.invalidate(totalCapitalProvider);
         ref.invalidate(dailyProfitsProvider);
@@ -551,6 +943,292 @@ class DashboardScreen extends ConsumerWidget {
       }
     }
   }
+
+  Future<void> _confirmResetAllData(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.delete_forever_rounded, color: AppColors.error),
+            SizedBox(width: 8),
+            Text('Full Clean Start?'),
+          ],
+        ),
+        content: const Text(
+          'This will delete all sales records, sale allocations, and inventory stock batches.\n\nTotal Capital, Total Sold, and Total Profit will all reset to ₱0.00.\n\nThis action cannot be undone.',
+          style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Yes, Wipe Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ref.read(inventoryDaoProvider).resetAllData();
+        ref.read(dashboardSettingsProvider.notifier).revertAllToAuto();
+        ref.invalidate(saleStatsProvider);
+        ref.invalidate(totalCapitalProvider);
+        ref.invalidate(dailyProfitsProvider);
+        ref.invalidate(inventorySummariesProvider);
+        ref.invalidate(allSalesProvider);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content:
+                  Text('All sales and stock batches have been wiped to ₱0.00'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error wiping data: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Single Card Value Editor Dialog
+// ────────────────────────────────────────────────────────────────────────────
+
+Future<void> _showEditCardValueDialog(
+  BuildContext context,
+  WidgetRef ref,
+  String cardType, // 'capital' | 'sold' | 'profit'
+) async {
+  final settings = ref.read(dashboardSettingsProvider);
+  final capitalAsync = ref.read(totalCapitalProvider);
+  final statsAsync = ref.read(saleStatsProvider);
+
+  String defaultLabel;
+  String currentTitle;
+  double? currentManual;
+  double autoValue;
+  IconData icon;
+  List<Color> gradient;
+
+  switch (cardType) {
+    case 'capital':
+      defaultLabel = 'Total Capital';
+      currentTitle = settings.capitalTitle ?? defaultLabel;
+      currentManual = settings.manualCapital;
+      autoValue = capitalAsync.asData?.value ?? 0.0;
+      icon = Icons.account_balance_wallet_rounded;
+      gradient = AppColors.capitalGradient;
+      break;
+    case 'sold':
+      defaultLabel = 'Total Sold';
+      currentTitle = settings.soldTitle ?? defaultLabel;
+      currentManual = settings.manualSold;
+      autoValue = statsAsync.asData?.value.totalSold ?? 0.0;
+      icon = Icons.shopping_bag_rounded;
+      gradient = AppColors.soldGradient;
+      break;
+    case 'profit':
+    default:
+      defaultLabel = 'Total Profit';
+      currentTitle = settings.profitTitle ?? defaultLabel;
+      currentManual = settings.manualProfit;
+      autoValue = statsAsync.asData?.value.totalProfit ?? 0.0;
+      icon = Icons.trending_up_rounded;
+      gradient = AppColors.profitGradient;
+      break;
+  }
+
+  final valCtrl = TextEditingController(
+    text: currentManual != null
+        ? currentManual.toStringAsFixed(2)
+        : autoValue.toStringAsFixed(2),
+  );
+  final titleCtrl = TextEditingController(text: currentTitle);
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: gradient),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Edit $defaultLabel',
+              style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.accentLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      size: 16, color: AppColors.primaryDeep),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Auto-calculated: ${formatPeso(autoValue)}',
+                      style: const TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 12,
+                        color: AppColors.primaryDeep,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: titleCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Card Title / Label',
+                prefixIcon: Icon(Icons.title_rounded, size: 20),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: valCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Card Value (₱)',
+                prefixText: '₱ ',
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Quick action chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                ActionChip(
+                  avatar: const Icon(Icons.exposure_zero_rounded, size: 16),
+                  label: const Text('₱0.00'),
+                  backgroundColor: AppColors.accentLight,
+                  onPressed: () => valCtrl.text = '0.00',
+                ),
+                ActionChip(
+                  avatar: const Icon(Icons.auto_mode_rounded, size: 16),
+                  label: const Text('Use Auto DB Value'),
+                  backgroundColor: AppColors.accentLight,
+                  onPressed: () => valCtrl.text = autoValue.toStringAsFixed(2),
+                ),
+                if (currentManual != null)
+                  ActionChip(
+                    avatar: const Icon(Icons.undo_rounded,
+                        size: 16, color: AppColors.primary),
+                    label: const Text('Revert to Auto'),
+                    onPressed: () {
+                      final notifier =
+                          ref.read(dashboardSettingsProvider.notifier);
+                      switch (cardType) {
+                        case 'capital':
+                          notifier.setManualCapital(null,
+                              title: titleCtrl.text.trim());
+                          break;
+                        case 'sold':
+                          notifier.setManualSold(null,
+                              title: titleCtrl.text.trim());
+                          break;
+                        case 'profit':
+                          notifier.setManualProfit(null,
+                              title: titleCtrl.text.trim());
+                          break;
+                      }
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text('$defaultLabel reverted to auto calculation'),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final parsedVal = cleanParseNumber(valCtrl.text);
+            final title = titleCtrl.text.trim().isNotEmpty
+                ? titleCtrl.text.trim()
+                : defaultLabel;
+            final notifier = ref.read(dashboardSettingsProvider.notifier);
+
+            switch (cardType) {
+              case 'capital':
+                notifier.setManualCapital(parsedVal, title: title);
+                break;
+              case 'sold':
+                notifier.setManualSold(parsedVal, title: title);
+                break;
+              case 'profit':
+                notifier.setManualProfit(parsedVal, title: title);
+                break;
+            }
+
+            Navigator.pop(ctx);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$title updated to ${formatPeso(parsedVal ?? autoValue)}'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
