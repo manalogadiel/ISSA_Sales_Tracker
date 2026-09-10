@@ -15,13 +15,14 @@ class _OcrLineItem {
     this.productName = '',
     this.quantity = 0.0,
     this.costPrice = 0.0,
+    this.confirmed = true,
   });
 
   final String rawText;
   String productName;
   double quantity;
   double costPrice;
-  bool confirmed = false;
+  bool confirmed;
   bool excluded = false;
 }
 
@@ -122,49 +123,180 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
   }
 
   /// Parse OCR text into candidate line items.
-  /// Heuristic: each non-empty line that contains digits is a candidate.
+  /// Supports:
+  /// - 2-line format: Product name line followed by "[Qty] x [Unit Cost]" line
+  /// - Inline format: "Product Name [Qty] x [Unit Cost]"
+  /// - Trailing Qty + Price: "Product Name [Qty] [Unit Cost]"
+  /// - Trailing Price: "Product Name [Price]" (Qty defaults to 1)
+  /// Automatically filters out headers, metadata, totals, cash/payment, and tax lines.
   List<_OcrLineItem> _parseOcrText(String text) {
-    final lines = text
+    final rawLines = text
         .split('\n')
         .map((l) => l.trim())
-        .where((l) => l.isNotEmpty && l.length > 2)
+        .where((l) => l.isNotEmpty)
         .toList();
 
-    return lines.map((line) {
-      // Try to extract numbers (qty + price)
-      final numbers = RegExp(r'\d+(?:\.\d+)?')
-          .allMatches(line)
-          .map((m) => double.parse(m.group(0)!))
-          .toList();
+    // Filter out obvious metadata, headers, totals, and dividers
+    final lines = rawLines.where((l) => !_isIgnoreLine(l)).toList();
 
-      double qty = 0;
-      double price = 0;
-      String name = line;
+    final items = <_OcrLineItem>[];
+    int i = 0;
 
-      if (numbers.length >= 2) {
-        qty = numbers[0];
-        price = numbers[1];
-        // Try to strip leading numbers from name
-        name = line.replaceAll(RegExp(r'\d+(?:\.\d+)?'), '').trim();
-        if (name.isEmpty) name = line;
-      } else if (numbers.length == 1) {
-        price = numbers[0];
-        name = line.replaceAll(RegExp(r'\d+(?:\.\d+)?'), '').trim();
-        if (name.isEmpty) name = line;
+    final qtyPriceRegex = RegExp(
+      r'^\s*(\d+(?:\.\d+)?)\s*(?:kg|kilos|kilo|pcs|pc|packs|pack)?\s*[xX@*]\s*(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)',
+      caseSensitive: false,
+    );
+
+    final inlineQtyPriceRegex = RegExp(
+      r'^(.*?)\s+(\d+(?:\.\d+)?)\s*(?:kg|kilos|kilo|pcs|pc|packs|pack)?\s*[xX@*]\s*(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)',
+      caseSensitive: false,
+    );
+
+    final trailingQtyPriceRegex = RegExp(
+      r'^(.*?)\s+(\d+(?:\.\d+)?)\s*(?:kg|kilos|kilo|pcs|pc)?\s+(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*$',
+      caseSensitive: false,
+    );
+
+    final trailingPriceRegex = RegExp(
+      r'^(.*?)\s+(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*$',
+      caseSensitive: false,
+    );
+
+    while (i < lines.length) {
+      final cur = lines[i];
+
+      // Case A: 2-line pattern (Line i is Name; Line i+1 is "Qty x UnitPrice")
+      if (i + 1 < lines.length) {
+        final next = lines[i + 1];
+        final m = qtyPriceRegex.firstMatch(next);
+        if (m != null) {
+          final q = double.tryParse(m.group(1)!) ?? 1.0;
+          final p = _parsePrice(m.group(2)!) ?? 0.0;
+          final name = _cleanProductName(cur);
+          if (name.isNotEmpty && name.length >= 2) {
+            items.add(_OcrLineItem(
+              rawText: '$cur\n$next',
+              productName: name,
+              quantity: q,
+              costPrice: p,
+              confirmed: true,
+            ));
+            i += 2;
+            continue;
+          }
+        }
       }
 
-      return _OcrLineItem(
-        rawText: line,
-        productName: _toTitleCase(name.replaceAll(RegExp(r'[^\w\s]'), ' ').trim()),
-        quantity: qty,
-        costPrice: price,
-      );
-    }).toList();
+      // Case B: Inline Qty x Price ("Pork Tapa 5.000 x 310.00")
+      final inlineM = inlineQtyPriceRegex.firstMatch(cur);
+      if (inlineM != null) {
+        final name = _cleanProductName(inlineM.group(1)!);
+        final q = double.tryParse(inlineM.group(2)!) ?? 1.0;
+        final p = _parsePrice(inlineM.group(3)!) ?? 0.0;
+        if (name.isNotEmpty && name.length >= 2) {
+          items.add(_OcrLineItem(
+            rawText: cur,
+            productName: name,
+            quantity: q,
+            costPrice: p,
+            confirmed: true,
+          ));
+          i++;
+          continue;
+        }
+      }
+
+      // Case C: Trailing Qty + Price ("Pork Tapa 5.0 310.00")
+      final trailingM = trailingQtyPriceRegex.firstMatch(cur);
+      if (trailingM != null) {
+        final name = _cleanProductName(trailingM.group(1)!);
+        final q = double.tryParse(trailingM.group(2)!) ?? 1.0;
+        final p = _parsePrice(trailingM.group(3)!) ?? 0.0;
+        if (name.isNotEmpty && name.length >= 2) {
+          items.add(_OcrLineItem(
+            rawText: cur,
+            productName: name,
+            quantity: q,
+            costPrice: p,
+            confirmed: true,
+          ));
+          i++;
+          continue;
+        }
+      }
+
+      // Case D: Trailing Price only (defaults Qty to 1.0 kg)
+      final priceM = trailingPriceRegex.firstMatch(cur);
+      if (priceM != null) {
+        final name = _cleanProductName(priceM.group(1)!);
+        final p = _parsePrice(priceM.group(2)!) ?? 0.0;
+        if (name.isNotEmpty && name.length >= 2 && p > 0) {
+          items.add(_OcrLineItem(
+            rawText: cur,
+            productName: name,
+            quantity: 1.0,
+            costPrice: p,
+            confirmed: true,
+          ));
+          i++;
+          continue;
+        }
+      }
+
+      i++;
+    }
+
+    return items;
+  }
+
+  bool _isIgnoreLine(String line) {
+    final lower = line.toLowerCase().trim();
+    if (lower.isEmpty) return true;
+    if (RegExp(r'^[-=_.*#~]{3,}$').hasMatch(lower)) return true;
+    if (RegExp(r'^\(?\d+\)?$').hasMatch(lower)) return true; // e.g. (7)
+    if (RegExp(r'^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}').hasMatch(lower)) return true;
+    if (RegExp(r'^\d{1,2}:\d{2}').hasMatch(lower)) return true;
+    if (RegExp(r'^(?:#|or#|si#|inv#|trans#|ref#)\s*[\w-]+').hasMatch(lower)) return true;
+
+    const ignoreKeywords = [
+      'total', 'subtotal', 'sub-total', 'grand total', 'net total', 'amount due',
+      'cash', 'change', 'tendered', 'payment', 'card', 'gcash', 'maya',
+      'employee', 'pos:', 'pos 1', 'pos 2', 'cashier', 'terminal',
+      'meat processing', 'store', 'branch', 'official receipt', 'sales invoice',
+      'vat', 'tax', 'vatable', 'zero rated', 'exempt', 'tin:',
+    ];
+
+    for (final kw in ignoreKeywords) {
+      if (lower.contains(kw)) return true;
+    }
+    return false;
+  }
+
+  double? _parsePrice(String s) {
+    final cleaned = s
+        .replaceAll(RegExp(r'[₱PpPp\s,]'), '')
+        .replaceAll(RegExp(r'PHP', caseSensitive: false), '');
+    return double.tryParse(cleaned);
+  }
+
+  String _cleanProductName(String line) {
+    // Strip trailing line total price if attached, e.g. "₱1,175.00" or "1,175.00"
+    var name = line.replaceFirst(
+      RegExp(r'\s+(?:[₱Pp]?(?:HP)?\.?\s*)?\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*$',
+          caseSensitive: false),
+      '',
+    );
+    name = name
+        .replaceAll(RegExp(r"[^\w\s'-]"), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return _toTitleCase(name);
   }
 
   String _toTitleCase(String s) => s
       .split(' ')
-      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+      .where((w) => w.isNotEmpty)
+      .map((w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
       .join(' ');
 
   /// Commit only the confirmed, non-excluded items.
