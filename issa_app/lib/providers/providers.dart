@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/app_database.dart';
 
 export '../db/app_database.dart';
+export 'product_appearance.dart';
 
 /// Singleton database provider.
 final databaseProvider = Provider<AppDatabase>((ref) {

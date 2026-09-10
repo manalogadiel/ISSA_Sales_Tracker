@@ -4,7 +4,7 @@ import '../../providers/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-enum _SortBy { name, costPrice, sellingPrice }
+enum _SortBy { name, costPrice, sellingPrice, stock }
 enum _SortDir { asc, desc }
 
 class CostTableScreen extends ConsumerStatefulWidget {
@@ -140,6 +140,12 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                   case 'sell_desc':
                     _sortBy = _SortBy.sellingPrice;
                     _sortDir = _SortDir.desc;
+                  case 'stock_asc':
+                    _sortBy = _SortBy.stock;
+                    _sortDir = _SortDir.asc;
+                  case 'stock_desc':
+                    _sortBy = _SortBy.stock;
+                    _sortDir = _SortDir.desc;
                 }
               });
             },
@@ -150,6 +156,8 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
               PopupMenuItem(value: 'cost_desc', child: Text('Cost High→Low')),
               PopupMenuItem(value: 'sell_asc', child: Text('Sell Low→High')),
               PopupMenuItem(value: 'sell_desc', child: Text('Sell High→Low')),
+              PopupMenuItem(value: 'stock_asc', child: Text('Stock Low→High')),
+              PopupMenuItem(value: 'stock_desc', child: Text('Stock High→Low')),
             ],
           ),
           const SizedBox(width: 8),
@@ -175,9 +183,11 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
               cmp = a.product.name.compareTo(b.product.name);
             } else if (_sortBy == _SortBy.costPrice) {
               cmp = a.latestCostPrice.compareTo(b.latestCostPrice);
-            } else {
+            } else if (_sortBy == _SortBy.sellingPrice) {
               cmp = a.product.effectiveSellingPrice
                   .compareTo(b.product.effectiveSellingPrice);
+            } else {
+              cmp = a.totalQuantity.compareTo(b.totalQuantity);
             }
             return _sortDir == _SortDir.asc ? cmp : -cmp;
           });
@@ -197,7 +207,7 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      flex: 3,
+                      flex: 12,
                       child: _HeaderCell(
                         label: 'Product',
                         active: _sortBy == _SortBy.name,
@@ -215,53 +225,68 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                       ),
                     ),
                     Expanded(
-                      flex: 2,
-                      child: _HeaderCell(
-                        label: 'Cost/kg',
-                        active: _sortBy == _SortBy.costPrice,
-                        dir: _sortDir,
-                        onTap: () => setState(() {
-                          if (_sortBy == _SortBy.costPrice) {
-                            _sortDir = _sortDir == _SortDir.asc
-                                ? _SortDir.desc
-                                : _SortDir.asc;
-                          } else {
-                            _sortBy = _SortBy.costPrice;
-                            _sortDir = _SortDir.asc;
-                          }
-                        }),
-                        align: TextAlign.right,
+                      flex: 7,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _HeaderCell(
+                          label: 'Cost/kg',
+                          active: _sortBy == _SortBy.costPrice,
+                          dir: _sortDir,
+                          onTap: () => setState(() {
+                            if (_sortBy == _SortBy.costPrice) {
+                              _sortDir = _sortDir == _SortDir.asc
+                                  ? _SortDir.desc
+                                  : _SortDir.asc;
+                            } else {
+                              _sortBy = _SortBy.costPrice;
+                              _sortDir = _SortDir.asc;
+                            }
+                          }),
+                          align: TextAlign.right,
+                        ),
                       ),
                     ),
                     Expanded(
-                      flex: 2,
-                      child: _HeaderCell(
-                        label: 'Sell/kg',
-                        active: _sortBy == _SortBy.sellingPrice,
-                        dir: _sortDir,
-                        onTap: () => setState(() {
-                          if (_sortBy == _SortBy.sellingPrice) {
-                            _sortDir = _sortDir == _SortDir.asc
-                                ? _SortDir.desc
-                                : _SortDir.asc;
-                          } else {
-                            _sortBy = _SortBy.sellingPrice;
-                            _sortDir = _SortDir.asc;
-                          }
-                        }),
-                        align: TextAlign.right,
+                      flex: 9,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: _HeaderCell(
+                          label: 'Sell/kg',
+                          active: _sortBy == _SortBy.sellingPrice,
+                          dir: _sortDir,
+                          onTap: () => setState(() {
+                            if (_sortBy == _SortBy.sellingPrice) {
+                              _sortDir = _sortDir == _SortDir.asc
+                                  ? _SortDir.desc
+                                  : _SortDir.asc;
+                            } else {
+                              _sortBy = _SortBy.sellingPrice;
+                              _sortDir = _SortDir.asc;
+                            }
+                          }),
+                          align: TextAlign.right,
+                        ),
                       ),
                     ),
-                    const Expanded(
-                      flex: 2,
-                      child: Text(
-                        'Stock',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                    Expanded(
+                      flex: 5,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: _HeaderCell(
+                          label: 'Stock',
+                          active: _sortBy == _SortBy.stock,
+                          dir: _sortDir,
+                          onTap: () => setState(() {
+                            if (_sortBy == _SortBy.stock) {
+                              _sortDir = _sortDir == _SortDir.asc
+                                  ? _SortDir.desc
+                                  : _SortDir.asc;
+                            } else {
+                              _sortBy = _SortBy.stock;
+                              _sortDir = _SortDir.asc;
+                            }
+                          }),
+                          align: TextAlign.right,
                         ),
                       ),
                     ),
@@ -293,9 +318,11 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                           children: [
                             // Product Name
                             Expanded(
-                              flex: 3,
+                              flex: 12,
                               child: Text(
                                 s.product.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontFamily: 'Nunito',
                                   fontSize: 13,
@@ -306,78 +333,104 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                             ),
                             // Cost / kg
                             Expanded(
-                              flex: 2,
-                              child: Text(
-                                formatPeso(s.latestCostPrice),
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  fontFamily: 'Nunito',
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primaryDeep,
+                              flex: 7,
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    formatPeso(s.latestCostPrice),
+                                    textAlign: TextAlign.right,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: const TextStyle(
+                                      fontFamily: 'Nunito',
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryDeep,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                             // Sell / kg (Editable)
                             Expanded(
-                              flex: 2,
-                              child: InkWell(
-                                onTap: () => _showEditSellingPriceDialog(
-                                    context, s.product),
-                                borderRadius: BorderRadius.circular(6),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 4, horizontal: 2),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          s.product.effectiveSellingPrice > 0
-                                              ? formatPeso(s.product.effectiveSellingPrice)
-                                              : 'Set ₱',
-                                          textAlign: TextAlign.right,
-                                          style: TextStyle(
-                                            fontFamily: 'Nunito',
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                            color: s.product.effectiveSellingPrice > 0
-                                                ? AppColors.success
-                                                : AppColors.warning,
-                                            decoration:
-                                                s.product.effectiveSellingPrice == 0
-                                                    ? TextDecoration.underline
-                                                    : null,
-                                          ),
+                              flex: 9,
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: InkWell(
+                                    onTap: () => _showEditSellingPriceDialog(
+                                        context, s.product),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4, horizontal: 2),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerRight,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              s.product.effectiveSellingPrice > 0
+                                                  ? formatPeso(s.product.effectiveSellingPrice)
+                                                  : 'Set ₱',
+                                              maxLines: 1,
+                                              softWrap: false,
+                                              style: TextStyle(
+                                                fontFamily: 'Nunito',
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: s.product.effectiveSellingPrice > 0
+                                                    ? AppColors.success
+                                                    : AppColors.warning,
+                                                decoration:
+                                                    s.product.effectiveSellingPrice == 0
+                                                        ? TextDecoration.underline
+                                                        : null,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Icon(
+                                              Icons.edit_outlined,
+                                              size: 13,
+                                              color: s.product.effectiveSellingPrice > 0
+                                                  ? AppColors.success.withAlpha(160)
+                                                  : AppColors.warning,
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(width: 2),
-                                      Icon(
-                                        Icons.edit_outlined,
-                                        size: 13,
-                                        color: s.product.effectiveSellingPrice > 0
-                                            ? AppColors.success.withAlpha(160)
-                                            : AppColors.warning,
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                             // In Stock
                             Expanded(
-                              flex: 2,
-                              child: Text(
-                                formatKg(s.totalQuantity),
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontFamily: 'Nunito',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: isLow
-                                      ? AppColors.error
-                                      : AppColors.textSecondary,
+                              flex: 5,
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    formatKg(s.totalQuantity),
+                                    textAlign: TextAlign.right,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: TextStyle(
+                                      fontFamily: 'Nunito',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isLow
+                                          ? AppColors.error
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -415,31 +468,38 @@ class _HeaderCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Row(
-        mainAxisAlignment: align == TextAlign.right
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'Nunito',
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: active ? Colors.white : Colors.white70,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: align == TextAlign.right
+            ? Alignment.centerRight
+            : Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: align == TextAlign.right
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: active ? Colors.white : Colors.white70,
+              ),
             ),
-          ),
-          if (active) ...[
-            const SizedBox(width: 4),
-            Icon(
-              dir == _SortDir.asc
-                  ? Icons.arrow_upward_rounded
-                  : Icons.arrow_downward_rounded,
-              size: 14,
-              color: Colors.white,
-            ),
+            if (active) ...[
+              const SizedBox(width: 3),
+              Icon(
+                dir == _SortDir.asc
+                    ? Icons.arrow_upward_rounded
+                    : Icons.arrow_downward_rounded,
+                size: 13,
+                color: Colors.white,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

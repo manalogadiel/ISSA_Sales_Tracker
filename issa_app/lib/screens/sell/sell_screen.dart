@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/providers.dart';
@@ -16,6 +18,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   double _quantity = 0.5;
   final _priceCtrl = TextEditingController();
   bool _isProcessing = false;
+  bool _isGridView = false;
 
   @override
   void dispose() {
@@ -50,43 +53,88 @@ class _SellScreenState extends ConsumerState<SellScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Product picker
-                const SectionHeader(title: 'SELECT PRODUCT'),
-                const SizedBox(height: 10),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.divider),
-                  ),
-                  child: Column(
-                    children: activeList.isEmpty
-                        ? [
-                            const Padding(
-                              padding: EdgeInsets.all(20),
-                              child: Text(
-                                'All products are out of stock.',
-                                style: TextStyle(color: AppColors.textSecondary),
-                              ),
-                            )
-                          ]
-                        : activeList
-                            .map((s) => _ProductOption(
-                                  summary: s,
-                                  selected: _selectedProduct?.id == s.product.id,
-                                  onTap: () => setState(() {
-                                    _selectedProduct = s.product;
-                                    _quantity = 0.5;
-                                    // Auto-fill sell price = set sellingPrice (or fallback to latest cost price)
-                                    final defaultPrice = s.product.effectiveSellingPrice > 0
-                                        ? s.product.effectiveSellingPrice
-                                        : s.latestCostPrice;
-                                    _priceCtrl.text =
-                                        defaultPrice.toStringAsFixed(2);
-                                  }),
-                                ))
-                            .toList(),
+                SectionHeader(
+                  title: 'SELECT PRODUCT',
+                  trailing: IconButton(
+                    icon: Icon(
+                      _isGridView
+                          ? Icons.view_list_rounded
+                          : Icons.grid_view_rounded,
+                      size: 20,
+                      color: AppColors.primaryDeep,
+                    ),
+                    tooltip: _isGridView ? 'List View' : 'Grid View',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _isGridView = !_isGridView),
                   ),
                 ),
+                const SizedBox(height: 10),
+                if (activeList.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: const Text(
+                      'All products are out of stock.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  )
+                else if (_isGridView)
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.05,
+                    children: activeList
+                        .map((s) => _ProductGridOption(
+                              summary: s,
+                              selected: _selectedProduct?.id == s.product.id,
+                              onTap: () => setState(() {
+                                _selectedProduct = s.product;
+                                _quantity = 0.5;
+                                final defaultPrice =
+                                    s.product.effectiveSellingPrice > 0
+                                        ? s.product.effectiveSellingPrice
+                                        : s.latestCostPrice;
+                                _priceCtrl.text =
+                                    defaultPrice.toStringAsFixed(2);
+                              }),
+                            ))
+                        .toList(),
+                  )
+                else
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Column(
+                      children: activeList
+                          .map((s) => _ProductOption(
+                                summary: s,
+                                selected: _selectedProduct?.id == s.product.id,
+                                onTap: () => setState(() {
+                                  _selectedProduct = s.product;
+                                  _quantity = 0.5;
+                                  final defaultPrice =
+                                      s.product.effectiveSellingPrice > 0
+                                          ? s.product.effectiveSellingPrice
+                                          : s.latestCostPrice;
+                                  _priceCtrl.text =
+                                      defaultPrice.toStringAsFixed(2);
+                                }),
+                              ))
+                          .toList(),
+                    ),
+                  ),
 
                 const SizedBox(height: 24),
 
@@ -224,7 +272,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   }
 }
 
-class _ProductOption extends StatelessWidget {
+class _ProductOption extends ConsumerWidget {
   const _ProductOption({
     required this.summary,
     required this.selected,
@@ -236,29 +284,52 @@ class _ProductOption extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appearanceMap = ref.watch(productAppearanceProvider);
+    final appearance = appearanceMap[summary.product.id];
+    final defaultColor = ProductColorPresets.defaultForProduct(
+        summary.product.id, summary.product.name);
+    final displayColor = appearance?.color ?? defaultColor;
+    final hasImage = appearance?.imagePath != null &&
+        File(appearance!.imagePath!).existsSync();
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: selected ? AppColors.accentLight : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
+          border: selected
+              ? Border.all(color: AppColors.primaryDeep, width: 1.5)
+              : null,
         ),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: selected ? AppColors.primary : AppColors.accentLight,
+                color: displayColor,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(Icons.category_rounded,
-                  color: selected ? Colors.white : AppColors.primaryDeep,
-                  size: 20),
+              clipBehavior: Clip.antiAlias,
+              child: hasImage
+                  ? Image.file(File(appearance.imagePath!), fit: BoxFit.cover)
+                  : Center(
+                      child: Text(
+                        summary.product.name.isNotEmpty
+                            ? summary.product.name[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -291,6 +362,160 @@ class _ProductOption extends StatelessWidget {
             if (selected)
               const Icon(Icons.check_circle_rounded,
                   color: AppColors.primary, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductGridOption extends ConsumerWidget {
+  const _ProductGridOption({
+    required this.summary,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final InventorySummary summary;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appearanceMap = ref.watch(productAppearanceProvider);
+    final appearance = appearanceMap[summary.product.id];
+    final defaultColor = ProductColorPresets.defaultForProduct(
+        summary.product.id, summary.product.name);
+    final displayColor = appearance?.color ?? defaultColor;
+    final hasImage = appearance?.imagePath != null &&
+        File(appearance!.imagePath!).existsSync();
+
+    final sellPrice = summary.product.effectiveSellingPrice;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accentLight : AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.divider,
+            width: selected ? 2.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: selected
+                  ? AppColors.primary.withAlpha(40)
+                  : Colors.black.withAlpha(8),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Color or Photo Banner
+            Container(
+              height: 44,
+              width: double.infinity,
+              color: displayColor,
+              child: Stack(
+                children: [
+                  if (hasImage)
+                    Positioned.fill(
+                      child: Image.file(
+                        File(appearance.imagePath!),
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    Center(
+                      child: Text(
+                        summary.product.name.isNotEmpty
+                            ? summary.product.name[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                  if (selected)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_circle_rounded,
+                          size: 16,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Card Body
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      summary.product.name,
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? AppColors.primaryDeep
+                            : AppColors.textPrimary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Spacer(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          sellPrice > 0 ? formatPeso(sellPrice) : 'Set ₱',
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: sellPrice > 0
+                                ? AppColors.success
+                                : AppColors.warning,
+                          ),
+                        ),
+                        Text(
+                          formatKg(summary.totalQuantity),
+                          style: const TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

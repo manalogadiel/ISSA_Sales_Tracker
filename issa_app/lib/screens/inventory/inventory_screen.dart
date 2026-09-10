@@ -1,15 +1,27 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../providers/providers.dart';
 import '../../theme/app_theme.dart';
-import 'package:drift/drift.dart' show Value;
 import '../../widgets/common_widgets.dart';
 
-class InventoryScreen extends ConsumerWidget {
+class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InventoryScreen> createState() => _InventoryScreenState();
+}
+
+class _InventoryScreenState extends ConsumerState<InventoryScreen> {
+  bool _isDeleteMode = false;
+  bool _isGridView = false;
+
+  @override
+  Widget build(BuildContext context) {
     final summaries = ref.watch(inventorySummariesProvider);
 
     return Scaffold(
@@ -17,45 +29,167 @@ class InventoryScreen extends ConsumerWidget {
         title: const Text('Inventory'),
         actions: [
           IconButton(
+            icon: Icon(
+              _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+            ),
+            tooltip: _isGridView ? 'List view' : 'Grid view',
+            onPressed: () => setState(() => _isGridView = !_isGridView),
+          ),
+          IconButton(
             icon: const Icon(Icons.add_circle_rounded),
             color: AppColors.primary,
             iconSize: 28,
             tooltip: 'Add product',
             onPressed: () => _showAddProductDialog(context, ref),
           ),
-          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            tooltip: 'Inventory options',
+            onSelected: (val) {
+              if (val == 'toggle_delete') {
+                setState(() => _isDeleteMode = !_isDeleteMode);
+              } else if (val == 'toggle_view') {
+                setState(() => _isGridView = !_isGridView);
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'toggle_delete',
+                child: Row(
+                  children: [
+                    Icon(
+                      _isDeleteMode
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.delete_outline_rounded,
+                      size: 20,
+                      color: _isDeleteMode ? AppColors.success : AppColors.error,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      _isDeleteMode ? 'Exit Delete Mode' : 'Delete Mode',
+                      style: TextStyle(
+                        color:
+                            _isDeleteMode ? AppColors.success : AppColors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'toggle_view',
+                child: Row(
+                  children: [
+                    Icon(
+                      _isGridView
+                          ? Icons.view_list_rounded
+                          : Icons.grid_view_rounded,
+                      size: 20,
+                      color: AppColors.primaryDeep,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                        _isGridView ? 'Top-to-Down View' : 'Grid View (2-Col)'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: summaries.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (list) {
-          if (list.isEmpty) {
-            return EmptyState(
-              icon: Icons.inventory_2_outlined,
-              title: 'No products yet',
-              subtitle: 'Add your first product to get started.',
-              action: FilledButton.icon(
-                onPressed: () => _showAddProductDialog(context, ref),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add Product'),
-                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+      body: Column(
+        children: [
+          // Banner when Delete Mode is Active
+          if (_isDeleteMode)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: AppColors.error.withAlpha(25),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      color: AppColors.error, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Delete Mode Active — tap trash icons to delete items',
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _isDeleteMode = false),
+                    child: const Text('Done',
+                        style: TextStyle(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ],
               ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-            itemCount: list.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, i) =>
-                _ProductCard(summary: list[i]),
-          );
-        },
+            ),
+
+          // Main Inventory Content
+          Expanded(
+            child: summaries.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (list) {
+                if (list.isEmpty) {
+                  return EmptyState(
+                    icon: Icons.inventory_2_outlined,
+                    title: 'No products yet',
+                    subtitle: 'Add your first product to get started.',
+                    action: FilledButton.icon(
+                      onPressed: () => _showAddProductDialog(context, ref),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add Product'),
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48)),
+                    ),
+                  );
+                }
+
+                if (_isGridView) {
+                  return GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.72,
+                    ),
+                    itemCount: list.length,
+                    itemBuilder: (context, i) => _ProductGridCard(
+                      summary: list[i],
+                      isDeleteMode: _isDeleteMode,
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                  itemCount: list.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, i) => _ProductCard(
+                    summary: list[i],
+                    isDeleteMode: _isDeleteMode,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _showAddProductDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showAddProductDialog(
+      BuildContext context, WidgetRef ref) async {
     final nameCtrl = TextEditingController();
     final qtyCtrl = TextEditingController(text: '1');
     final costPriceCtrl = TextEditingController();
@@ -186,7 +320,9 @@ class InventoryScreen extends ConsumerWidget {
                   ),
                 );
 
-                ref.read(dashboardSettingsProvider.notifier).onStockAdded(qty * costPrice);
+                ref
+                    .read(dashboardSettingsProvider.notifier)
+                    .onStockAdded(qty * costPrice);
                 ref.invalidate(inventorySummariesProvider);
                 ref.invalidate(allProductsProvider);
                 ref.invalidate(totalCapitalProvider);
@@ -212,9 +348,18 @@ class InventoryScreen extends ConsumerWidget {
   }
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// List View Card
+// ────────────────────────────────────────────────────────────────────────────
+
 class _ProductCard extends ConsumerStatefulWidget {
-  const _ProductCard({required this.summary});
+  const _ProductCard({
+    required this.summary,
+    required this.isDeleteMode,
+  });
+
   final InventorySummary summary;
+  final bool isDeleteMode;
 
   @override
   ConsumerState<_ProductCard> createState() => _ProductCardState();
@@ -227,6 +372,18 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
   Widget build(BuildContext context) {
     final s = widget.summary;
     final isLowStock = s.totalQuantity < 1.0;
+    final appearanceMap = ref.watch(productAppearanceProvider);
+    final appearance = appearanceMap[s.product.id];
+    final defaultColor =
+        ProductColorPresets.defaultForProduct(s.product.id, s.product.name);
+    final displayColor = appearance?.color ?? defaultColor;
+    final hasImage = appearance?.imagePath != null &&
+        File(appearance!.imagePath!).existsSync();
+
+    final sellPrice = s.product.effectiveSellingPrice;
+    final costPrice = s.latestCostPrice;
+    final hasProfit = sellPrice > 0;
+    final profitDiff = sellPrice - costPrice;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -234,11 +391,13 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isLowStock ? AppColors.warning.withAlpha(128) : AppColors.divider,
+          color: isLowStock
+              ? AppColors.warning.withAlpha(128)
+              : AppColors.divider,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withAlpha(20),
+            color: AppColors.primary.withAlpha(15),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -246,103 +405,314 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
       ),
       child: Column(
         children: [
-          // Header row
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Product avatar
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.accentLight,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.category_rounded,
-                        color: AppColors.primaryDeep, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          s.product.name,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isLowStock
-                                    ? AppColors.warning.withAlpha(30)
-                                    : AppColors.accentLight,
-                                borderRadius: BorderRadius.circular(6),
+                  // Row 1: Avatar + Product Name + Stock Badge + Chevron
+                  Row(
+                    children: [
+                      // Product Avatar / Photo Thumbnail
+                      GestureDetector(
+                        onTap: () => _showCustomizeAppearanceDialog(
+                            context, ref, s.product),
+                        child: Tooltip(
+                          message: 'Tap to change color or photo',
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: displayColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: Colors.black12, width: 1),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: hasImage
+                                    ? Image.file(
+                                        File(appearance.imagePath!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Center(
+                                        child: Text(
+                                          s.product.name.isNotEmpty
+                                              ? s.product.name[0].toUpperCase()
+                                              : '?',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 20,
+                                          ),
+                                        ),
+                                      ),
                               ),
-                              child: Text(
-                                formatKg(s.totalQuantity),
-                                style: TextStyle(
-                                  fontFamily: 'Nunito',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: isLowStock
-                                      ? AppColors.warning
-                                      : AppColors.primaryDeep,
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2.5),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                          color: Colors.black26, blurRadius: 2)
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.palette_rounded,
+                                      size: 11, color: AppColors.primaryDeep),
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // Name and Stock badge
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.product.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
                             ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Sell: ${s.product.effectiveSellingPrice > 0 ? formatPeso(s.product.effectiveSellingPrice) : 'Unset'} · Cost: ${formatPeso(s.latestCostPrice)}/kg',
-                                style: Theme.of(context).textTheme.bodySmall,
-                                overflow: TextOverflow.ellipsis,
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: isLowStock
+                                    ? AppColors.warning.withAlpha(25)
+                                    : AppColors.accentLight,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isLowStock
+                                      ? AppColors.warning.withAlpha(80)
+                                      : AppColors.divider,
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 13,
+                                    color: isLowStock
+                                        ? AppColors.warning
+                                        : AppColors.primaryDeep,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${formatKg(s.totalQuantity)} in stock',
+                                    style: TextStyle(
+                                      fontFamily: 'Nunito',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: isLowStock
+                                          ? AppColors.warning
+                                          : AppColors.primaryDeep,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
+                      ),
+
+                      // Chevron indicator
+                      Icon(
+                        _expanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: AppColors.textSecondary,
+                        size: 26,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Row 2: Detail chips (Sell Price, Cost Price, Profit)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      // Selling price chip
+                      InkWell(
+                        onTap: () =>
+                            _showEditSellingPriceDialog(context, s.product),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: sellPrice > 0
+                                ? AppColors.success.withAlpha(20)
+                                : AppColors.warning.withAlpha(20),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: sellPrice > 0
+                                  ? AppColors.success.withAlpha(80)
+                                  : AppColors.warning.withAlpha(80),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.sell_outlined,
+                                size: 13,
+                                color: sellPrice > 0
+                                    ? AppColors.success
+                                    : AppColors.warning,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                sellPrice > 0
+                                    ? 'Sell: ${formatPeso(sellPrice)}'
+                                    : 'Sell: Set ₱',
+                                style: TextStyle(
+                                  fontFamily: 'Nunito',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: sellPrice > 0
+                                      ? AppColors.success
+                                      : AppColors.warning,
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 11,
+                                color: sellPrice > 0
+                                    ? AppColors.success.withAlpha(180)
+                                    : AppColors.warning,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Cost price chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentLight.withAlpha(120),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.divider),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.price_change_outlined,
+                                size: 13, color: AppColors.textSecondary),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Cost: ${formatPeso(costPrice)}/kg',
+                              style: const TextStyle(
+                                fontFamily: 'Nunito',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Profit spread chip
+                      if (hasProfit)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: profitDiff >= 0
+                                ? Colors.green.withAlpha(20)
+                                : AppColors.error.withAlpha(20),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            profitDiff >= 0
+                                ? '+${formatPeso(profitDiff)} profit/kg'
+                                : '${formatPeso(profitDiff)} loss/kg',
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: profitDiff >= 0
+                                  ? Colors.green.shade800
+                                  : AppColors.error,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  // Row 3: Action Buttons (Add batch, Color picker, Delete if mode active)
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () =>
+                            _showCustomizeAppearanceDialog(context, ref, s.product),
+                        icon: const Icon(Icons.palette_outlined, size: 16),
+                        label: const Text('Color / Photo',
+                            style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        onPressed: () =>
+                            _showAddBatchDialog(context, s.product.id),
+                        icon: const Icon(Icons.add_box_outlined, size: 16),
+                        label: const Text('Add Restock',
+                            style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                      // DELETE BUTTON ONLY IN DELETE MODE
+                      if (widget.isDeleteMode) ...[
+                        const SizedBox(width: 4),
+                        FilledButton.tonalIcon(
+                          onPressed: () =>
+                              _showDeleteProductDialog(context, s),
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              size: 16, color: AppColors.error),
+                          label: const Text('Delete',
+                              style: TextStyle(
+                                  color: AppColors.error, fontSize: 12)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.error.withAlpha(30),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                        ),
                       ],
-                    ),
-                  ),
-                  // Actions
-                  IconButton(
-                    icon: const Icon(Icons.sell_outlined),
-                    color: s.product.effectiveSellingPrice > 0
-                        ? AppColors.primaryDeep
-                        : AppColors.warning,
-                    tooltip: 'Set selling price',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () =>
-                        _showEditSellingPriceDialog(context, s.product),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add_box_outlined),
-                    color: AppColors.primaryDeep,
-                    tooltip: 'Add restock batch',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () =>
-                        _showAddBatchDialog(context, s.product.id),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    color: AppColors.error.withAlpha(220),
-                    tooltip: 'Delete product',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () =>
-                        _showDeleteProductDialog(context, s),
-                  ),
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textSecondary,
+                    ],
                   ),
                 ],
               ),
@@ -353,9 +723,12 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
           if (_expanded) ...[
             const Divider(height: 1),
             ...s.batches.map(
-              (batch) => _BatchTile(batch: batch, productName: s.product.name),
+              (batch) => _BatchTile(
+                batch: batch,
+                productName: s.product.name,
+                isDeleteMode: widget.isDeleteMode,
+              ),
             ),
-            // Add restock button at bottom
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: OutlinedButton.icon(
@@ -441,7 +814,9 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                   source: BatchSource.manual,
                 ),
               );
-              ref.read(dashboardSettingsProvider.notifier).onStockAdded(qty * price);
+              ref
+                  .read(dashboardSettingsProvider.notifier)
+                  .onStockAdded(qty * price);
               ref.invalidate(inventorySummariesProvider);
               ref.invalidate(totalCapitalProvider);
               if (ctx.mounted) Navigator.pop(ctx);
@@ -478,7 +853,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                   labelText: 'Selling price per kg (₱)',
                   prefixText: '₱ ',
                   prefixIcon: Icon(Icons.sell_outlined),
-                  helperText: 'Default price when selling (leave empty or 0 to unset)',
+                  helperText:
+                      'Default price when selling (leave empty or 0 to unset)',
                 ),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
@@ -486,7 +862,9 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
                   final n = cleanParseNumber(v);
-                  if (n == null || n < 0) return 'Enter valid selling price (e.g. 250.00)';
+                  if (n == null || n < 0) {
+                    return 'Enter valid selling price (e.g. 250.00)';
+                  }
                   return null;
                 },
               ),
@@ -630,7 +1008,9 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               } else {
                 await dao.deleteProduct(s.product.id);
               }
-              ref.read(dashboardSettingsProvider.notifier).onStockRemoved(productVal);
+              ref
+                  .read(dashboardSettingsProvider.notifier)
+                  .onStockRemoved(productVal);
               ref.invalidate(inventorySummariesProvider);
               ref.invalidate(allProductsProvider);
               ref.invalidate(totalCapitalProvider);
@@ -638,7 +1018,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('"${s.product.name}" deleted from inventory.'),
+                    content:
+                        Text('"${s.product.name}" deleted from inventory.'),
                     backgroundColor: AppColors.textPrimary,
                   ),
                 );
@@ -652,10 +1033,553 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
   }
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// 2-Column Grid View Card
+// ────────────────────────────────────────────────────────────────────────────
+
+class _ProductGridCard extends ConsumerWidget {
+  const _ProductGridCard({
+    required this.summary,
+    required this.isDeleteMode,
+  });
+
+  final InventorySummary summary;
+  final bool isDeleteMode;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = summary;
+    final isLowStock = s.totalQuantity < 1.0;
+    final appearanceMap = ref.watch(productAppearanceProvider);
+    final appearance = appearanceMap[s.product.id];
+    final defaultColor =
+        ProductColorPresets.defaultForProduct(s.product.id, s.product.name);
+    final displayColor = appearance?.color ?? defaultColor;
+    final hasImage = appearance?.imagePath != null &&
+        File(appearance!.imagePath!).existsSync();
+
+    final sellPrice = s.product.effectiveSellingPrice;
+    final costPrice = s.latestCostPrice;
+
+    return InkWell(
+      onTap: () => _showBatchDetailsModal(context, ref, s, isDeleteMode),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isLowStock
+                ? AppColors.warning.withAlpha(128)
+                : AppColors.divider,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withAlpha(15),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image / Color Header Banner
+            Stack(
+              children: [
+                Container(
+                  height: 72,
+                  width: double.infinity,
+                  color: displayColor,
+                  child: hasImage
+                      ? Image.file(
+                          File(appearance.imagePath!),
+                          fit: BoxFit.cover,
+                        )
+                      : Center(
+                          child: Text(
+                            s.product.name.isNotEmpty
+                                ? s.product.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 32,
+                            ),
+                          ),
+                        ),
+                ),
+                // Color customization icon button on banner
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withAlpha(90),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.palette_rounded,
+                          size: 14, color: Colors.white),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Color / Photo',
+                      onPressed: () => _showCustomizeAppearanceDialog(
+                          context, ref, s.product),
+                    ),
+                  ),
+                ),
+                // Delete button in top left if Delete Mode is active
+                if (isDeleteMode)
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: AppColors.error,
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            size: 14, color: Colors.white),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Delete Product',
+                        onPressed: () =>
+                            _showDeleteProductDialog(context, ref, s),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
+            // Card Body
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.product.name,
+                      style: const TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+
+                    // Stock chip
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isLowStock
+                            ? AppColors.warning.withAlpha(25)
+                            : AppColors.accentLight,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        formatKg(s.totalQuantity),
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: isLowStock
+                              ? AppColors.warning
+                              : AppColors.primaryDeep,
+                        ),
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    // Price Chips
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            sellPrice > 0 ? formatPeso(sellPrice) : 'No price',
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: sellPrice > 0
+                                  ? AppColors.success
+                                  : AppColors.textHint,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${formatPeso(costPrice)}c',
+                          style: const TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    // Card bottom action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _showAddBatchDialog(
+                                context, ref, s.product.id),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 28),
+                            ),
+                            child: const Text('+ Restock',
+                                style: TextStyle(fontSize: 11)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBatchDetailsModal(BuildContext context, WidgetRef ref,
+      InventorySummary s, bool isDeleteMode) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.product.name,
+                    style: const TextStyle(
+                      fontFamily: 'Nunito',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${formatKg(s.totalQuantity)} in stock',
+                    style: const TextStyle(
+                      fontFamily: 'Nunito',
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primaryDeep,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  'Sell: ${s.product.effectiveSellingPrice > 0 ? formatPeso(s.product.effectiveSellingPrice) : 'Unset'} · Cost: ${formatPeso(s.latestCostPrice)}/kg',
+                  style: const TextStyle(
+                    fontFamily: 'Nunito',
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              'INVENTORY BATCHES',
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textSecondary,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (s.batches.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: Text('No batches found for this product.',
+                      style: TextStyle(color: AppColors.textHint)),
+                ),
+              )
+            else
+              ...s.batches.map(
+                (batch) => _BatchTile(
+                  batch: batch,
+                  productName: s.product.name,
+                  isDeleteMode: isDeleteMode,
+                ),
+              ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showAddBatchDialog(context, ref, s.product.id);
+              },
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add Restock Batch'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAddBatchDialog(
+      BuildContext context, WidgetRef ref, int productId) async {
+    final qtyCtrl = TextEditingController(text: '1');
+    final priceCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Restock Batch'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: qtyCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Quantity added (kg)',
+                  suffixText: 'kg',
+                  prefixIcon: Icon(Icons.scale_outlined),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  final n = double.tryParse(v ?? '');
+                  if (n == null || n <= 0) return 'Enter valid quantity';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: priceCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Cost price per kg (₱)',
+                  prefixText: '₱ ',
+                  prefixIcon: Icon(Icons.price_change_outlined),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  final n = double.tryParse(v ?? '');
+                  if (n == null || n < 0) return 'Enter valid price';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              final dao = ref.read(inventoryDaoProvider);
+              final qty = double.parse(qtyCtrl.text);
+              final price = double.parse(priceCtrl.text);
+              await dao.insertBatch(
+                CapitalBatchesCompanion.insert(
+                  productId: productId,
+                  quantityAdded: qty,
+                  remainingQuantity: qty,
+                  costPrice: price,
+                  source: BatchSource.manual,
+                ),
+              );
+              ref
+                  .read(dashboardSettingsProvider.notifier)
+                  .onStockAdded(qty * price);
+              ref.invalidate(inventorySummariesProvider);
+              ref.invalidate(totalCapitalProvider);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDeleteProductDialog(
+      BuildContext context, WidgetRef ref, InventorySummary s) async {
+    final dao = ref.read(inventoryDaoProvider);
+    final salesCount = await dao.salesCountForProduct(s.product.id);
+
+    if (!context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            SizedBox(width: 8),
+            Text('Delete Product'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete "${s.product.name}"?',
+              style: const TextStyle(
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (s.totalQuantity > 0)
+              Text(
+                '• Current inventory of ${formatKg(s.totalQuantity)} (${s.batches.length} batch${s.batches.length == 1 ? '' : 'es'}) will be removed.',
+                style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            if (salesCount > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withAlpha(25),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.error.withAlpha(80)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 18, color: AppColors.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This product has $salesCount recorded sale${salesCount == 1 ? '' : 's'}. Deleting it will also remove its sales history.',
+                        style: const TextStyle(
+                          fontFamily: 'Nunito',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final productVal = s.batches.fold<double>(
+                  0.0, (acc, b) => acc + b.remainingQuantity * b.costPrice);
+              if (salesCount > 0) {
+                await dao.deleteProductCascade(s.product.id);
+              } else {
+                await dao.deleteProduct(s.product.id);
+              }
+              ref
+                  .read(dashboardSettingsProvider.notifier)
+                  .onStockRemoved(productVal);
+              ref.invalidate(inventorySummariesProvider);
+              ref.invalidate(allProductsProvider);
+              ref.invalidate(totalCapitalProvider);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content:
+                        Text('"${s.product.name}" deleted from inventory.'),
+                    backgroundColor: AppColors.textPrimary,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Sub-container (Batch Tile)
+// ────────────────────────────────────────────────────────────────────────────
+
 class _BatchTile extends ConsumerWidget {
-  const _BatchTile({required this.batch, required this.productName});
+  const _BatchTile({
+    required this.batch,
+    required this.productName,
+    required this.isDeleteMode,
+  });
+
   final CapitalBatch batch;
   final String productName;
+  final bool isDeleteMode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -690,8 +1614,7 @@ class _BatchTile extends ConsumerWidget {
             fontFamily: 'Nunito',
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color:
-                isExhausted ? AppColors.textHint : AppColors.textPrimary,
+            color: isExhausted ? AppColors.textHint : AppColors.textPrimary,
           ),
         ),
         subtitle: Text(
@@ -711,17 +1634,17 @@ class _BatchTile extends ConsumerWidget {
                     size: 18, color: AppColors.primaryDeep),
                 tooltip: 'Edit batch',
                 visualDensity: VisualDensity.compact,
-                onPressed: () =>
-                    _showEditBatchDialog(context, ref, batch),
+                onPressed: () => _showEditBatchDialog(context, ref, batch),
               ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded,
-                  size: 18, color: AppColors.error),
-              tooltip: 'Delete batch',
-              visualDensity: VisualDensity.compact,
-              onPressed: () =>
-                  _showDeleteBatchDialog(context, ref, batch),
-            ),
+            // DELETE BUTTON ONLY VISIBLE IN DELETE MODE
+            if (isDeleteMode)
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded,
+                    size: 18, color: AppColors.error),
+                tooltip: 'Delete batch',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _showDeleteBatchDialog(context, ref, batch),
+              ),
           ],
         ),
       ),
@@ -730,8 +1653,8 @@ class _BatchTile extends ConsumerWidget {
 
   Future<void> _showEditBatchDialog(
       BuildContext context, WidgetRef ref, CapitalBatch batch) async {
-    final qtyCtrl = TextEditingController(
-        text: batch.remainingQuantity.toString());
+    final qtyCtrl =
+        TextEditingController(text: batch.remainingQuantity.toString());
     final priceCtrl =
         TextEditingController(text: batch.costPrice.toString());
     final formKey = GlobalKey<FormState>();
@@ -751,8 +1674,7 @@ class _BatchTile extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppColors.warning.withAlpha(26),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: AppColors.warning.withAlpha(77)),
+                  border: Border.all(color: AppColors.warning.withAlpha(77)),
                 ),
                 child: const Row(
                   children: [
@@ -938,4 +1860,242 @@ class _BatchTile extends ConsumerWidget {
         'Nov',
         'Dec'
       ][m];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Appearance Customization Dialog (Color palette + Image upload)
+// ────────────────────────────────────────────────────────────────────────────
+
+Future<void> _showCustomizeAppearanceDialog(
+    BuildContext context, WidgetRef ref, Product product) async {
+  final defaultColor =
+      ProductColorPresets.defaultForProduct(product.id, product.name);
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setModalState) {
+        final currentApp = ref.watch(productAppearanceProvider)[product.id];
+        final displayColor = currentApp?.color ?? defaultColor;
+        final hasImage = currentApp?.imagePath != null &&
+            File(currentApp!.imagePath!).existsSync();
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, 16, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.divider,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: displayColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: hasImage
+                        ? Image.file(File(currentApp.imagePath!),
+                            fit: BoxFit.cover)
+                        : Center(
+                            child: Text(
+                              product.name.isNotEmpty
+                                  ? product.name[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 24,
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          style: const TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Pick a color or upload a product photo',
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'COLOR PALETTE',
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: ProductColorPresets.palette.map((c) {
+                  final isSelected = displayColor.toARGB32() == c.toARGB32();
+                  return GestureDetector(
+                    onTap: () async {
+                      await ref
+                          .read(productAppearanceProvider.notifier)
+                          .setColor(product.id, c);
+                      setModalState(() {});
+                    },
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: c,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected ? Colors.black87 : Colors.black12,
+                          width: isSelected ? 2.5 : 1,
+                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: c.withAlpha(120),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check_rounded,
+                              size: 18, color: Colors.white)
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 22),
+              const Text(
+                'PRODUCT PHOTO',
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final picker = ImagePicker();
+                        final img = await picker.pickImage(
+                          source: ImageSource.camera,
+                          maxWidth: 800,
+                          maxHeight: 800,
+                          imageQuality: 85,
+                        );
+                        if (img != null) {
+                          await ref
+                              .read(productAppearanceProvider.notifier)
+                              .setImage(product.id, img.path);
+                          setModalState(() {});
+                        }
+                      },
+                      icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                      label: const Text('Camera'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final picker = ImagePicker();
+                        final img = await picker.pickImage(
+                          source: ImageSource.gallery,
+                          maxWidth: 800,
+                          maxHeight: 800,
+                          imageQuality: 85,
+                        );
+                        if (img != null) {
+                          await ref
+                              .read(productAppearanceProvider.notifier)
+                              .setImage(product.id, img.path);
+                          setModalState(() {});
+                        }
+                      },
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: const Text('Gallery'),
+                    ),
+                  ),
+                ],
+              ),
+              if (hasImage) ...[
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      await ref
+                          .read(productAppearanceProvider.notifier)
+                          .setImage(product.id, null);
+                      setModalState(() {});
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 16, color: AppColors.error),
+                    label: const Text('Remove Photo',
+                        style: TextStyle(color: AppColors.error)),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Done'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 }
