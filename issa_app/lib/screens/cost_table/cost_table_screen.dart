@@ -306,19 +306,19 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                                     children: [
                                       Flexible(
                                         child: Text(
-                                          s.product.sellingPrice > 0
-                                              ? formatPeso(s.product.sellingPrice)
+                                          s.product.effectiveSellingPrice > 0
+                                              ? formatPeso(s.product.effectiveSellingPrice)
                                               : 'Set ₱',
                                           textAlign: TextAlign.right,
                                           style: TextStyle(
                                             fontFamily: 'Nunito',
                                             fontSize: 13,
                                             fontWeight: FontWeight.w700,
-                                            color: s.product.sellingPrice > 0
+                                            color: s.product.effectiveSellingPrice > 0
                                                 ? AppColors.success
                                                 : AppColors.warning,
                                             decoration:
-                                                s.product.sellingPrice == 0
+                                                s.product.effectiveSellingPrice == 0
                                                     ? TextDecoration.underline
                                                     : null,
                                           ),
@@ -328,7 +328,7 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                                       Icon(
                                         Icons.edit_outlined,
                                         size: 13,
-                                        color: s.product.sellingPrice > 0
+                                        color: s.product.effectiveSellingPrice > 0
                                             ? AppColors.success.withAlpha(160)
                                             : AppColors.warning,
                                       ),
