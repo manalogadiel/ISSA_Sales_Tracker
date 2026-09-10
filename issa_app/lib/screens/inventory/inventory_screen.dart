@@ -129,7 +129,7 @@ class InventoryScreen extends ConsumerWidget {
                       const TextInputType.numberWithOptions(decimal: true),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
-                    final n = double.tryParse(v.trim());
+                    final n = cleanParseNumber(v);
                     if (n == null || n < 0) return 'Enter valid selling price';
                     return null;
                   },
@@ -146,43 +146,61 @@ class InventoryScreen extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
-              final dao = ref.read(inventoryDaoProvider);
-              final trimmedName = nameCtrl.text.trim();
-              final existing =
-                  await dao.findProductByNameCaseInsensitive(trimmedName);
+              try {
+                final dao = ref.read(inventoryDaoProvider);
+                final trimmedName = nameCtrl.text.trim();
+                final existing =
+                    await dao.findProductByNameCaseInsensitive(trimmedName);
 
-              final sellPrice =
-                  double.tryParse(sellingPriceCtrl.text.trim()) ?? 0.0;
+                final sellPrice =
+                    cleanParseNumber(sellingPriceCtrl.text) ?? 0.0;
 
-              int productId;
-              if (existing != null) {
-                productId = existing.id;
-                if (sellPrice > 0) {
-                  await dao.updateProductSellingPrice(
-                    id: productId,
-                    sellingPrice: sellPrice,
+                int productId;
+                if (existing != null) {
+                  productId = existing.id;
+                  if (sellPrice > 0) {
+                    await dao.updateProductSellingPrice(
+                      id: productId,
+                      sellingPrice: sellPrice,
+                    );
+                  }
+                } else {
+                  productId = await dao.insertProduct(
+                    ProductsCompanion.insert(
+                      name: trimmedName,
+                      sellingPrice: Value(sellPrice),
+                    ),
                   );
                 }
-              } else {
-                productId = await dao.insertProduct(
-                  ProductsCompanion.insert(
-                    name: trimmedName,
-                    sellingPrice: Value(sellPrice),
+
+                final qty = cleanParseNumber(qtyCtrl.text) ?? 1.0;
+                final costPrice = cleanParseNumber(costPriceCtrl.text) ?? 0.0;
+
+                await dao.insertBatch(
+                  CapitalBatchesCompanion.insert(
+                    productId: productId,
+                    quantityAdded: qty,
+                    remainingQuantity: qty,
+                    costPrice: costPrice,
+                    source: BatchSource.manual,
                   ),
                 );
+
+                ref.invalidate(inventorySummariesProvider);
+                ref.invalidate(allProductsProvider);
+                ref.invalidate(totalCapitalProvider);
+
+                if (ctx.mounted) Navigator.pop(ctx);
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error saving product: $e'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
               }
-
-              await dao.insertBatch(
-                CapitalBatchesCompanion.insert(
-                  productId: productId,
-                  quantityAdded: double.parse(qtyCtrl.text.trim()),
-                  remainingQuantity: double.parse(qtyCtrl.text.trim()),
-                  costPrice: double.parse(costPriceCtrl.text.trim()),
-                  source: BatchSource.manual,
-                ),
-              );
-
-              if (ctx.mounted) Navigator.pop(ctx);
             },
             style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
             child: const Text('Add'),
@@ -455,13 +473,15 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                   labelText: 'Selling price per kg (₱)',
                   prefixText: '₱ ',
                   prefixIcon: Icon(Icons.sell_outlined),
-                  helperText: 'Default price when selling this item',
+                  helperText: 'Default price when selling (leave empty or 0 to unset)',
                 ),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                autofocus: true,
                 validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Enter valid selling price';
+                  if (v == null || v.trim().isEmpty) return null;
+                  final n = cleanParseNumber(v);
+                  if (n == null || n < 0) return 'Enter valid selling price (e.g. 250.00)';
                   return null;
                 },
               ),
@@ -476,12 +496,39 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
           FilledButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
-              final val = double.parse(ctrl.text.trim());
-              await ref.read(inventoryDaoProvider).updateProductSellingPrice(
-                    id: product.id,
-                    sellingPrice: val,
+              final val = cleanParseNumber(ctrl.text) ?? 0.0;
+              try {
+                await ref.read(inventoryDaoProvider).updateProductSellingPrice(
+                      id: product.id,
+                      sellingPrice: val,
+                    );
+                ref.invalidate(inventorySummariesProvider);
+                ref.invalidate(allProductsProvider);
+                ref.invalidate(totalCapitalProvider);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        val > 0
+                            ? 'Selling price for ${product.name} saved (${formatPeso(val)}/kg)'
+                            : 'Selling price for ${product.name} unset',
+                      ),
+                      backgroundColor: AppColors.success,
+                      duration: const Duration(seconds: 2),
+                    ),
                   );
-              if (ctx.mounted) Navigator.pop(ctx);
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to save selling price: $e'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Save'),
           ),

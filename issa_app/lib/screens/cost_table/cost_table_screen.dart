@@ -42,14 +42,15 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                   labelText: 'Selling price per kg (₱)',
                   prefixText: '₱ ',
                   prefixIcon: Icon(Icons.sell_outlined),
+                  helperText: 'Default price when selling (leave empty or 0 to unset)',
                 ),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 autofocus: true,
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Enter price';
-                  final n = double.tryParse(v.trim());
-                  if (n == null || n < 0) return 'Invalid price';
+                  if (v == null || v.trim().isEmpty) return null;
+                  final n = cleanParseNumber(v);
+                  if (n == null || n < 0) return 'Invalid price (e.g. 250.00)';
                   return null;
                 },
               ),
@@ -64,14 +65,41 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
           FilledButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
-              final price = double.parse(ctrl.text.trim());
-              await ref
-                  .read(inventoryDaoProvider)
-                  .updateProductSellingPrice(
-                    id: product.id,
-                    sellingPrice: price,
+              final price = cleanParseNumber(ctrl.text) ?? 0.0;
+              try {
+                await ref
+                    .read(inventoryDaoProvider)
+                    .updateProductSellingPrice(
+                      id: product.id,
+                      sellingPrice: price,
+                    );
+                ref.invalidate(inventorySummariesProvider);
+                ref.invalidate(allProductsProvider);
+                ref.invalidate(totalCapitalProvider);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        price > 0
+                            ? 'Selling price for ${product.name} saved (${formatPeso(price)}/kg)'
+                            : 'Selling price for ${product.name} unset',
+                      ),
+                      backgroundColor: AppColors.success,
+                      duration: const Duration(seconds: 2),
+                    ),
                   );
-              if (ctx.mounted) Navigator.pop(ctx);
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to save selling price: $e'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Save'),
           ),

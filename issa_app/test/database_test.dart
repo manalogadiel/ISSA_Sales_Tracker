@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:issa_app/db/app_database.dart';
+import 'package:issa_app/widgets/common_widgets.dart';
 
 void main() {
   late AppDatabase db;
@@ -249,5 +250,37 @@ void main() {
     await invDao.deleteProduct(prodId);
     summaries = await invDao.watchInventorySummaries().first;
     expect(summaries.isEmpty, isTrue);
+  });
+
+  test('cleanParseNumber parses currency symbols, commas, and whitespace correctly', () {
+    expect(cleanParseNumber('150'), 150.0);
+    expect(cleanParseNumber('  150.50  '), 150.5);
+    expect(cleanParseNumber('₱ 250.00'), 250.0);
+    expect(cleanParseNumber('₱1,250.75'), 1250.75);
+    expect(cleanParseNumber('1,000'), 1000.0);
+    expect(cleanParseNumber(''), isNull);
+    expect(cleanParseNumber('   '), isNull);
+    expect(cleanParseNumber(null), isNull);
+    expect(cleanParseNumber('invalid'), isNull);
+  });
+
+  test('updateProductSellingPrice can set, update, and clear price', () async {
+    final prodId = await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Chicken Breast')),
+    );
+
+    // Initial default is 0.0
+    var prod = await invDao.findProductByNameCaseInsensitive('Chicken Breast');
+    expect(prod!.effectiveSellingPrice, 0.0);
+
+    // Update to 240.0
+    await invDao.updateProductSellingPrice(id: prodId, sellingPrice: 240.0);
+    prod = await invDao.findProductByNameCaseInsensitive('Chicken Breast');
+    expect(prod!.effectiveSellingPrice, 240.0);
+
+    // Clear price to 0.0
+    await invDao.updateProductSellingPrice(id: prodId, sellingPrice: 0.0);
+    prod = await invDao.findProductByNameCaseInsensitive('Chicken Breast');
+    expect(prod!.effectiveSellingPrice, 0.0);
   });
 }

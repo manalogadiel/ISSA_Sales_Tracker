@@ -63,7 +63,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('New Scan'),
             ),
-          const SizedBox(width: 8),
+          const SizedBox(width:8),
         ],
       ),
       body: _showReview

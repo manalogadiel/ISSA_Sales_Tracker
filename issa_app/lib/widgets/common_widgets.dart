@@ -254,3 +254,13 @@ String formatPeso(double value) =>
 /// Compact kg display: whole numbers without decimal, otherwise show one decimal.
 String formatKg(double value) =>
     value % 1 == 0 ? '${value.toInt()} kg' : '$value kg';
+
+/// Parses user-typed numeric strings that may contain '₱', commas, or spaces.
+double? cleanParseNumber(String? raw) {
+  if (raw == null) return null;
+  final cleaned =
+      raw.replaceAll('₱', '').replaceAll(',', '').replaceAll(' ', '').trim();
+  if (cleaned.isEmpty) return null;
+  return double.tryParse(cleaned);
+}
+
