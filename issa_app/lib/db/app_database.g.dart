@@ -86,7 +86,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<double> sellingPrice = GeneratedColumn<double>(
     'selling_price',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.double,
     requiredDuringInsert: false,
     defaultValue: const Constant(0.0),
@@ -163,7 +163,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       sellingPrice: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}selling_price'],
-      )!,
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -180,12 +180,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
 class Product extends DataClass implements Insertable<Product> {
   final int id;
   final String name;
-  final double sellingPrice;
+  final double? sellingPrice;
   final DateTime createdAt;
   const Product({
     required this.id,
     required this.name,
-    required this.sellingPrice,
+    this.sellingPrice,
     required this.createdAt,
   });
   @override
@@ -193,7 +193,9 @@ class Product extends DataClass implements Insertable<Product> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
-    map['selling_price'] = Variable<double>(sellingPrice);
+    if (!nullToAbsent || sellingPrice != null) {
+      map['selling_price'] = Variable<double>(sellingPrice);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -202,7 +204,9 @@ class Product extends DataClass implements Insertable<Product> {
     return ProductsCompanion(
       id: Value(id),
       name: Value(name),
-      sellingPrice: Value(sellingPrice),
+      sellingPrice: sellingPrice == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sellingPrice),
       createdAt: Value(createdAt),
     );
   }
@@ -215,7 +219,7 @@ class Product extends DataClass implements Insertable<Product> {
     return Product(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
-      sellingPrice: serializer.fromJson<double>(json['sellingPrice']),
+      sellingPrice: serializer.fromJson<double?>(json['sellingPrice']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -225,7 +229,7 @@ class Product extends DataClass implements Insertable<Product> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
-      'sellingPrice': serializer.toJson<double>(sellingPrice),
+      'sellingPrice': serializer.toJson<double?>(sellingPrice),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -233,12 +237,12 @@ class Product extends DataClass implements Insertable<Product> {
   Product copyWith({
     int? id,
     String? name,
-    double? sellingPrice,
+    Value<double?> sellingPrice = const Value.absent(),
     DateTime? createdAt,
   }) => Product(
     id: id ?? this.id,
     name: name ?? this.name,
-    sellingPrice: sellingPrice ?? this.sellingPrice,
+    sellingPrice: sellingPrice.present ? sellingPrice.value : this.sellingPrice,
     createdAt: createdAt ?? this.createdAt,
   );
   Product copyWithCompanion(ProductsCompanion data) {
@@ -278,7 +282,7 @@ class Product extends DataClass implements Insertable<Product> {
 class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<int> id;
   final Value<String> name;
-  final Value<double> sellingPrice;
+  final Value<double?> sellingPrice;
   final Value<DateTime> createdAt;
   const ProductsCompanion({
     this.id = const Value.absent(),
@@ -309,7 +313,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   ProductsCompanion copyWith({
     Value<int>? id,
     Value<String>? name,
-    Value<double>? sellingPrice,
+    Value<double?>? sellingPrice,
     Value<DateTime>? createdAt,
   }) {
     return ProductsCompanion(
@@ -1603,13 +1607,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
 typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   Value<int> id,
   required String name,
-  Value<double> sellingPrice,
+  Value<double?> sellingPrice,
   Value<DateTime> createdAt,
 });
 typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<int> id,
   Value<String> name,
-  Value<double> sellingPrice,
+  Value<double?> sellingPrice,
   Value<DateTime> createdAt,
 });
 
@@ -1869,7 +1873,7 @@ class $$ProductsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
-                Value<double> sellingPrice = const Value.absent(),
+                Value<double?> sellingPrice = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => ProductsCompanion(
                 id: id,
@@ -1881,7 +1885,7 @@ class $$ProductsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
-                Value<double> sellingPrice = const Value.absent(),
+                Value<double?> sellingPrice = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => ProductsCompanion.insert(
                 id: id,

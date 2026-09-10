@@ -21,8 +21,8 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
   Future<void> _showEditSellingPriceDialog(
       BuildContext context, Product product) async {
     final ctrl = TextEditingController(
-      text: product.sellingPrice > 0
-          ? product.sellingPrice.toStringAsFixed(2)
+      text: product.effectiveSellingPrice > 0
+          ? product.effectiveSellingPrice.toStringAsFixed(2)
           : '',
     );
     final formKey = GlobalKey<FormState>();
@@ -148,7 +148,8 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
             } else if (_sortBy == _SortBy.costPrice) {
               cmp = a.latestCostPrice.compareTo(b.latestCostPrice);
             } else {
-              cmp = a.product.sellingPrice.compareTo(b.product.sellingPrice);
+              cmp = a.product.effectiveSellingPrice
+                  .compareTo(b.product.effectiveSellingPrice);
             }
             return _sortDir == _SortDir.asc ? cmp : -cmp;
           });
