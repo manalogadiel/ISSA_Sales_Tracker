@@ -363,6 +363,29 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
         .toList()
       ..sort((a, b) => a.key.compareTo(b.key));
   }
+
+  /// Clears all sales and restores consumed batch quantities back to inventory.
+  Future<void> resetAllSales() async {
+    await transaction(() async {
+      final allocations = await select(saleAllocations).get();
+      for (final a in allocations) {
+        final batch = await (select(capitalBatches)
+              ..where((t) => t.id.equals(a.batchId)))
+            .getSingleOrNull();
+        if (batch != null) {
+          await (update(capitalBatches)..where((t) => t.id.equals(a.batchId)))
+              .write(
+            CapitalBatchesCompanion(
+              remainingQuantity:
+                  Value(batch.remainingQuantity + a.quantityConsumed),
+            ),
+          );
+        }
+      }
+      await delete(saleAllocations).go();
+      await delete(sales).go();
+    });
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

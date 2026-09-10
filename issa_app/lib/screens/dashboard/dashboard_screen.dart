@@ -26,7 +26,43 @@ class DashboardScreen extends ConsumerWidget {
                 ref.invalidate(inventorySummariesProvider);
               },
             ),
-            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded),
+              tooltip: 'Dashboard options',
+              onSelected: (val) {
+                if (val == 'edit') {
+                  _showEditDashboardDialog(context, ref);
+                } else if (val == 'reset') {
+                  _showResetDashboardDialog(context, ref);
+                }
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.tune_rounded,
+                          size: 20, color: AppColors.primaryDeep),
+                      SizedBox(width: 12),
+                      Text('Edit Dashboard'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'reset',
+                  child: Row(
+                    children: [
+                      Icon(Icons.restart_alt_rounded,
+                          size: 20, color: AppColors.error),
+                      SizedBox(width: 12),
+                      Text('Reset Dashboard',
+                          style: TextStyle(color: AppColors.error)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
           ],
           bottom: const TabBar(
             indicatorColor: AppColors.primaryDeep,
@@ -63,6 +99,465 @@ class DashboardScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showEditDashboardDialog(
+      BuildContext context, WidgetRef ref) async {
+    final current = ref.read(dashboardSettingsProvider);
+    final titleCtrl = TextEditingController(text: current.welcomeTitle);
+    final subtitleCtrl = TextEditingController(text: current.welcomeSubtitle);
+    int selectedDays = current.chartDays;
+    bool showBanner = current.showWelcomeBanner;
+    bool showCapital = current.showCapitalTile;
+    bool showSold = current.showSoldTile;
+    bool showProfit = current.showProfitTile;
+    bool showChart = current.showProfitChart;
+    bool showSales = current.showRecentSales;
+    bool showFutureBanner = current.showFutureBanner;
+    bool showFutureBreakdown = current.showFutureBreakdown;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, scrollCtrl) => Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: Column(
+              children: [
+                // Drag handle
+                const SizedBox(height: 12),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.tune_rounded,
+                          color: AppColors.primaryDeep, size: 24),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Customize Dashboard',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView(
+                    controller: scrollCtrl,
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    children: [
+                      // Section 1: Greeting & Store Title
+                      const SectionHeader(title: 'GREETING & STORE TITLE'),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: titleCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Greeting Title',
+                          prefixIcon: Icon(Icons.title_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: subtitleCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Subtitle',
+                          prefixIcon: Icon(Icons.subtitles_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Section 2: Chart Days
+                      const SectionHeader(title: 'PROFIT CHART TIMEFRAME'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [7, 14, 30, 60].map((days) {
+                          final isSelected = selectedDays == days;
+                          return Expanded(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: ChoiceChip(
+                                label: Text('$days D'),
+                                selected: isSelected,
+                                selectedColor: AppColors.primary,
+                                labelStyle: TextStyle(
+                                  fontFamily: 'Nunito',
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppColors.textPrimary,
+                                ),
+                                onSelected: (val) {
+                                  if (val) {
+                                    setModalState(() => selectedDays = days);
+                                  }
+                                },
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Section 3: Visible Cards (Overview)
+                      const SectionHeader(title: 'OVERVIEW CARDS'),
+                      const SizedBox(height: 4),
+                      SwitchListTile.adaptive(
+                        title: const Text('Welcome Banner',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text(
+                            'Top greeting banner with business snapshot',
+                            style: TextStyle(fontSize: 12)),
+                        value: showBanner,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) =>
+                            setModalState(() => showBanner = val),
+                      ),
+                      SwitchListTile.adaptive(
+                        title: const Text('Total Capital Card',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Total capital in stock',
+                            style: TextStyle(fontSize: 12)),
+                        value: showCapital,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) =>
+                            setModalState(() => showCapital = val),
+                      ),
+                      SwitchListTile.adaptive(
+                        title: const Text('Total Sold Card',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text('All-time gross sales',
+                            style: TextStyle(fontSize: 12)),
+                        value: showSold,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) => setModalState(() => showSold = val),
+                      ),
+                      SwitchListTile.adaptive(
+                        title: const Text('Total Profit Card',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text('All-time net profit',
+                            style: TextStyle(fontSize: 12)),
+                        value: showProfit,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) =>
+                            setModalState(() => showProfit = val),
+                      ),
+                      SwitchListTile.adaptive(
+                        title: const Text('Profit Chart',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Daily profit trends graph',
+                            style: TextStyle(fontSize: 12)),
+                        value: showChart,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) =>
+                            setModalState(() => showChart = val),
+                      ),
+                      SwitchListTile.adaptive(
+                        title: const Text('Recent Sales List',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Latest sales transactions',
+                            style: TextStyle(fontSize: 12)),
+                        value: showSales,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) =>
+                            setModalState(() => showSales = val),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Section 4: Future Metrics Tab Visibility
+                      const SectionHeader(title: 'FUTURE METRICS CARDS'),
+                      const SizedBox(height: 4),
+                      SwitchListTile.adaptive(
+                        title: const Text('Projections Summary Banner',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text(
+                            'Estimated total value, profit & margin',
+                            style: TextStyle(fontSize: 12)),
+                        value: showFutureBanner,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) =>
+                            setModalState(() => showFutureBanner = val),
+                      ),
+                      SwitchListTile.adaptive(
+                        title: const Text('Product Breakdown List',
+                            style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.w600)),
+                        subtitle: const Text(
+                            'Individual product projection breakdowns',
+                            style: TextStyle(fontSize: 12)),
+                        value: showFutureBreakdown,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) =>
+                            setModalState(() => showFutureBreakdown = val),
+                      ),
+                    ],
+                  ),
+                ),
+                // Bottom Save Bar
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              ref
+                                  .read(dashboardSettingsProvider.notifier)
+                                  .updateSettings(
+                                    DashboardSettings(
+                                      welcomeTitle: titleCtrl.text.trim().isNotEmpty
+                                          ? titleCtrl.text.trim()
+                                          : 'Welcome back! 👋',
+                                      welcomeSubtitle:
+                                          subtitleCtrl.text.trim().isNotEmpty
+                                              ? subtitleCtrl.text.trim()
+                                              : "Here's your business snapshot.",
+                                      chartDays: selectedDays,
+                                      showWelcomeBanner: showBanner,
+                                      showCapitalTile: showCapital,
+                                      showSoldTile: showSold,
+                                      showProfitTile: showProfit,
+                                      showProfitChart: showChart,
+                                      showRecentSales: showSales,
+                                      showFutureBanner: showFutureBanner,
+                                      showFutureBreakdown: showFutureBreakdown,
+                                    ),
+                                  );
+                              ref.invalidate(dailyProfitsProvider);
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Dashboard preferences saved'),
+                                  backgroundColor: AppColors.success,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.check_rounded, size: 18),
+                            label: const Text('Save Changes'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showResetDashboardDialog(
+      BuildContext context, WidgetRef ref) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.restart_alt_rounded, color: AppColors.error),
+            SizedBox(width: 8),
+            Text('Reset Dashboard'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Choose what you would like to reset:',
+              style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              elevation: 0,
+              color: AppColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: AppColors.divider),
+              ),
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.accentLight,
+                  child: Icon(Icons.palette_outlined,
+                      color: AppColors.primaryDeep, size: 20),
+                ),
+                title: const Text('Reset Layout & View Settings',
+                    style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14)),
+                subtitle: const Text(
+                    'Restores default cards, greeting, and 30-day chart range.',
+                    style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                onTap: () {
+                  ref
+                      .read(dashboardSettingsProvider.notifier)
+                      .resetToDefaults();
+                  ref.invalidate(dailyProfitsProvider);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Dashboard layout and view settings restored to defaults'),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 0,
+              color: AppColors.error.withAlpha(15),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: AppColors.error.withAlpha(60)),
+              ),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.error.withAlpha(30),
+                  child: const Icon(Icons.delete_forever_rounded,
+                      color: AppColors.error, size: 20),
+                ),
+                title: const Text('Clear All Sales History',
+                    style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.error)),
+                subtitle: const Text(
+                    'Resets sales metrics to 0 and restores all inventory stock.',
+                    style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmClearSalesData(context, ref);
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmClearSalesData(
+      BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            SizedBox(width: 8),
+            Text('Clear Sales History?'),
+          ],
+        ),
+        content: const Text(
+          'This will delete all recorded sales and restore previously sold quantities back to their capital batches. Past revenue and profit will be reset to ₱0.00.\n\nThis action cannot be undone.',
+          style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Yes, Reset Sales'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ref.read(salesDaoProvider).resetAllSales();
+        ref.invalidate(saleStatsProvider);
+        ref.invalidate(totalCapitalProvider);
+        ref.invalidate(dailyProfitsProvider);
+        ref.invalidate(inventorySummariesProvider);
+        ref.invalidate(allSalesProvider);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content:
+                  Text('All sales data has been reset and stock restored'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error resetting sales data: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
   }
 }
 
