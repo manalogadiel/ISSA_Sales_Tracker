@@ -620,6 +620,78 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
+  Future<bool?> _showResetWarningDialog(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 28),
+            SizedBox(width: 10),
+            Text(
+              'Reset Warning',
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.error.withAlpha(20),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.error.withAlpha(80)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Icon(Icons.error_outline_rounded,
+                      color: AppColors.error, size: 22),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Warning: Resetting will clear or zero out metrics, sales records, or inventory capital depending on the option chosen.',
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 13,
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Are you sure you want to open the Reset Dashboard options?',
+              style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Proceed to Reset'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showResetDashboardDialog(
       BuildContext context, WidgetRef ref) async {
     await showDialog<void>(
@@ -638,6 +710,35 @@ class DashboardScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Warning box
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withAlpha(20),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.error.withAlpha(80)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Icon(Icons.warning_amber_rounded,
+                        color: AppColors.error, size: 22),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'WARNING: Resetting will clear or modify your metrics or erase data. Select an option carefully.',
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontSize: 12,
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
               const Text(
                 'Choose what you would like to reset:',
                 style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
@@ -666,17 +767,50 @@ class DashboardScreen extends ConsumerWidget {
                   subtitle: const Text(
                       'Instantly sets Total Capital, Sold, and Profit cards to ₱0.00.',
                       style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
-                  onTap: () {
-                    ref
-                        .read(dashboardSettingsProvider.notifier)
-                        .resetMetricsToZero();
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('All dashboard cards set to ₱0.00'),
-                        backgroundColor: AppColors.success,
+                  onTap: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                        title: Row(
+                          children: const [
+                            Icon(Icons.warning_amber_rounded,
+                                color: AppColors.error),
+                            SizedBox(width: 8),
+                            Text('Zero Out Cards?'),
+                          ],
+                        ),
+                        content: const Text(
+                          'Warning: This will manually override Total Capital, Total Sold, and Total Profit cards to ₱0.00 on your dashboard.\n\nDo you want to proceed?',
+                          style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c, false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(c, true),
+                            style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.error),
+                            child: const Text('Yes, Set to ₱0.00'),
+                          ),
+                        ],
                       ),
                     );
+                    if (confirmed == true) {
+                      ref
+                          .read(dashboardSettingsProvider.notifier)
+                          .resetMetricsToZero();
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('All dashboard cards set to ₱0.00'),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    }
                   },
                 ),
               ),
@@ -796,19 +930,50 @@ class DashboardScreen extends ConsumerWidget {
                   subtitle: const Text(
                       'Removes manual overrides and restores auto database values.',
                       style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
-                  onTap: () {
-                    ref
-                        .read(dashboardSettingsProvider.notifier)
-                        .resetToDefaults();
-                    ref.invalidate(dailyProfitsProvider);
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                            'Dashboard layout and metrics restored to auto defaults'),
-                        backgroundColor: AppColors.success,
+                  onTap: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                        title: Row(
+                          children: const [
+                            Icon(Icons.info_outline_rounded,
+                                color: AppColors.primary),
+                            SizedBox(width: 8),
+                            Text('Reset Layout & Values?'),
+                          ],
+                        ),
+                        content: const Text(
+                          'This will clear all manual card overrides and restore default layout settings and auto-calculated values.\n\nDo you want to proceed?',
+                          style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c, false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(c, true),
+                            child: const Text('Yes, Reset to Defaults'),
+                          ),
+                        ],
                       ),
                     );
+                    if (confirmed == true) {
+                      ref
+                          .read(dashboardSettingsProvider.notifier)
+                          .resetToDefaults();
+                      ref.invalidate(dailyProfitsProvider);
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Dashboard layout and metrics restored to auto defaults'),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    }
                   },
                 ),
               ),
@@ -1010,231 +1175,6 @@ class DashboardScreen extends ConsumerWidget {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Single Card Value Editor Dialog
-// ────────────────────────────────────────────────────────────────────────────
-
-Future<void> _showEditCardValueDialog(
-  BuildContext context,
-  WidgetRef ref,
-  String cardType, // 'capital' | 'sold' | 'profit'
-) async {
-  final settings = ref.read(dashboardSettingsProvider);
-  final capitalAsync = ref.read(totalCapitalProvider);
-  final statsAsync = ref.read(saleStatsProvider);
-
-  String defaultLabel;
-  String currentTitle;
-  double? currentManual;
-  double autoValue;
-  IconData icon;
-  List<Color> gradient;
-
-  switch (cardType) {
-    case 'capital':
-      defaultLabel = 'Total Capital';
-      currentTitle = settings.capitalTitle ?? defaultLabel;
-      currentManual = settings.manualCapital;
-      autoValue = capitalAsync.asData?.value ?? 0.0;
-      icon = Icons.account_balance_wallet_rounded;
-      gradient = AppColors.capitalGradient;
-      break;
-    case 'sold':
-      defaultLabel = 'Total Sold';
-      currentTitle = settings.soldTitle ?? defaultLabel;
-      currentManual = settings.manualSold;
-      autoValue = statsAsync.asData?.value.totalSold ?? 0.0;
-      icon = Icons.shopping_bag_rounded;
-      gradient = AppColors.soldGradient;
-      break;
-    case 'profit':
-    default:
-      defaultLabel = 'Total Profit';
-      currentTitle = settings.profitTitle ?? defaultLabel;
-      currentManual = settings.manualProfit;
-      autoValue = statsAsync.asData?.value.totalProfit ?? 0.0;
-      icon = Icons.trending_up_rounded;
-      gradient = AppColors.profitGradient;
-      break;
-  }
-
-  final valCtrl = TextEditingController(
-    text: currentManual != null
-        ? currentManual.toStringAsFixed(2)
-        : autoValue.toStringAsFixed(2),
-  );
-  final titleCtrl = TextEditingController(text: currentTitle);
-
-  await showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Edit $defaultLabel',
-              style: const TextStyle(
-                  fontFamily: 'Nunito',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.accentLight,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline_rounded,
-                      size: 16, color: AppColors.primaryDeep),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Auto-calculated: ${formatPeso(autoValue)}',
-                      style: const TextStyle(
-                        fontFamily: 'Nunito',
-                        fontSize: 12,
-                        color: AppColors.primaryDeep,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: titleCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Card Title / Label',
-                prefixIcon: Icon(Icons.title_rounded, size: 20),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: valCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Card Value (₱)',
-                prefixText: '₱ ',
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Quick action chips
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                ActionChip(
-                  avatar: const Icon(Icons.exposure_zero_rounded, size: 16),
-                  label: const Text('₱0.00'),
-                  backgroundColor: AppColors.accentLight,
-                  onPressed: () => valCtrl.text = '0.00',
-                ),
-                ActionChip(
-                  avatar: const Icon(Icons.auto_mode_rounded, size: 16),
-                  label: const Text('Use Auto DB Value'),
-                  backgroundColor: AppColors.accentLight,
-                  onPressed: () => valCtrl.text = autoValue.toStringAsFixed(2),
-                ),
-                if (currentManual != null)
-                  ActionChip(
-                    avatar: const Icon(Icons.undo_rounded,
-                        size: 16, color: AppColors.primary),
-                    label: const Text('Revert to Auto'),
-                    onPressed: () {
-                      final notifier =
-                          ref.read(dashboardSettingsProvider.notifier);
-                      switch (cardType) {
-                        case 'capital':
-                          notifier.setManualCapital(null,
-                              title: titleCtrl.text.trim());
-                          break;
-                        case 'sold':
-                          notifier.setManualSold(null,
-                              title: titleCtrl.text.trim());
-                          break;
-                        case 'profit':
-                          notifier.setManualProfit(null,
-                              title: titleCtrl.text.trim());
-                          break;
-                      }
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content:
-                              Text('$defaultLabel reverted to auto calculation'),
-                          backgroundColor: AppColors.success,
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final parsedVal = cleanParseNumber(valCtrl.text);
-            final title = titleCtrl.text.trim().isNotEmpty
-                ? titleCtrl.text.trim()
-                : defaultLabel;
-            final notifier = ref.read(dashboardSettingsProvider.notifier);
-
-            switch (cardType) {
-              case 'capital':
-                notifier.setManualCapital(parsedVal, title: title);
-                break;
-              case 'sold':
-                notifier.setManualSold(parsedVal, title: title);
-                break;
-              case 'profit':
-                notifier.setManualProfit(parsedVal, title: title);
-                break;
-            }
-
-            Navigator.pop(ctx);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    '$title updated to ${formatPeso(parsedVal ?? autoValue)}'),
-                backgroundColor: AppColors.success,
-              ),
-            );
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Overview Tab
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1344,12 +1284,8 @@ class _OverviewTab extends ConsumerWidget {
                     value: formatPeso(settings.manualCapital!),
                     gradient: AppColors.capitalGradient,
                     icon: Icons.account_balance_wallet_rounded,
-                    subtitle: 'Manual override (Tap to edit)',
+                    subtitle: 'Manual override',
                     isManual: true,
-                    onEdit: () =>
-                        _showEditCardValueDialog(context, ref, 'capital'),
-                    onTap: () =>
-                        _showEditCardValueDialog(context, ref, 'capital'),
                   );
                 }
                 return capitalAsync.when(
@@ -1362,10 +1298,6 @@ class _OverviewTab extends ConsumerWidget {
                     icon: Icons.account_balance_wallet_rounded,
                     subtitle: 'Current inventory value',
                     isManual: false,
-                    onEdit: () =>
-                        _showEditCardValueDialog(context, ref, 'capital'),
-                    onTap: () =>
-                        _showEditCardValueDialog(context, ref, 'capital'),
                   ),
                 );
               },
@@ -1391,12 +1323,8 @@ class _OverviewTab extends ConsumerWidget {
                             value: formatPeso(settings.manualSold!),
                             gradient: AppColors.soldGradient,
                             icon: Icons.shopping_bag_rounded,
-                            subtitle: 'Manual override (Tap to edit)',
+                            subtitle: 'Manual override',
                             isManual: true,
-                            onEdit: () =>
-                                _showEditCardValueDialog(context, ref, 'sold'),
-                            onTap: () =>
-                                _showEditCardValueDialog(context, ref, 'sold'),
                           )
                         else
                           _LoadingTile(),
@@ -1411,12 +1339,8 @@ class _OverviewTab extends ConsumerWidget {
                                 ? AppColors.profitGradient
                                 : [AppColors.error, const Color(0xFFB23636)],
                             icon: Icons.trending_up_rounded,
-                            subtitle: 'Manual override (Tap to edit)',
+                            subtitle: 'Manual override',
                             isManual: true,
-                            onEdit: () => _showEditCardValueDialog(
-                                context, ref, 'profit'),
-                            onTap: () => _showEditCardValueDialog(
-                                context, ref, 'profit'),
                           )
                         else
                           _LoadingTile(),
@@ -1435,13 +1359,9 @@ class _OverviewTab extends ConsumerWidget {
                           gradient: AppColors.soldGradient,
                           icon: Icons.shopping_bag_rounded,
                           subtitle: isSoldManual
-                              ? 'Manual override (Tap to edit)'
+                              ? 'Manual override'
                               : 'All-time revenue',
                           isManual: isSoldManual,
-                          onEdit: () =>
-                              _showEditCardValueDialog(context, ref, 'sold'),
-                          onTap: () =>
-                              _showEditCardValueDialog(context, ref, 'sold'),
                         ),
                         if (settings.showProfitTile) const SizedBox(height: 12),
                       ],
@@ -1459,13 +1379,9 @@ class _OverviewTab extends ConsumerWidget {
                               : [AppColors.error, const Color(0xFFB23636)],
                           icon: Icons.trending_up_rounded,
                           subtitle: isProfitManual
-                              ? 'Manual override (Tap to edit)'
+                              ? 'Manual override'
                               : 'Based on snapshotted cost prices',
                           isManual: isProfitManual,
-                          onEdit: () =>
-                              _showEditCardValueDialog(context, ref, 'profit'),
-                          onTap: () =>
-                              _showEditCardValueDialog(context, ref, 'profit'),
                         ),
                     ],
                   ),
