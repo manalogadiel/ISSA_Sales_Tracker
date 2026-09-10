@@ -64,6 +64,16 @@ class DashboardSettings {
   final bool showFutureBanner;
   final bool showFutureBreakdown;
 
+  // Manual overrides for card values (null = auto-calculate from database)
+  final double? manualCapital;
+  final double? manualSold;
+  final double? manualProfit;
+
+  // Custom titles for cards (null = default)
+  final String? capitalTitle;
+  final String? soldTitle;
+  final String? profitTitle;
+
   const DashboardSettings({
     this.welcomeTitle = 'Welcome back! 👋',
     this.welcomeSubtitle = "Here's your business snapshot.",
@@ -76,6 +86,12 @@ class DashboardSettings {
     this.showRecentSales = true,
     this.showFutureBanner = true,
     this.showFutureBreakdown = true,
+    this.manualCapital,
+    this.manualSold,
+    this.manualProfit,
+    this.capitalTitle,
+    this.soldTitle,
+    this.profitTitle,
   });
 
   DashboardSettings copyWith({
@@ -90,6 +106,18 @@ class DashboardSettings {
     bool? showRecentSales,
     bool? showFutureBanner,
     bool? showFutureBreakdown,
+    double? manualCapital,
+    bool clearManualCapital = false,
+    double? manualSold,
+    bool clearManualSold = false,
+    double? manualProfit,
+    bool clearManualProfit = false,
+    String? capitalTitle,
+    bool clearCapitalTitle = false,
+    String? soldTitle,
+    bool clearSoldTitle = false,
+    String? profitTitle,
+    bool clearProfitTitle = false,
   }) {
     return DashboardSettings(
       welcomeTitle: welcomeTitle ?? this.welcomeTitle,
@@ -103,6 +131,16 @@ class DashboardSettings {
       showRecentSales: showRecentSales ?? this.showRecentSales,
       showFutureBanner: showFutureBanner ?? this.showFutureBanner,
       showFutureBreakdown: showFutureBreakdown ?? this.showFutureBreakdown,
+      manualCapital: clearManualCapital
+          ? null
+          : (manualCapital ?? this.manualCapital),
+      manualSold: clearManualSold ? null : (manualSold ?? this.manualSold),
+      manualProfit:
+          clearManualProfit ? null : (manualProfit ?? this.manualProfit),
+      capitalTitle:
+          clearCapitalTitle ? null : (capitalTitle ?? this.capitalTitle),
+      soldTitle: clearSoldTitle ? null : (soldTitle ?? this.soldTitle),
+      profitTitle: clearProfitTitle ? null : (profitTitle ?? this.profitTitle),
     );
   }
 }
@@ -112,6 +150,52 @@ class DashboardSettingsNotifier extends StateNotifier<DashboardSettings> {
 
   void updateSettings(DashboardSettings settings) {
     state = settings;
+  }
+
+  void setManualCapital(double? value, {String? title}) {
+    state = state.copyWith(
+      manualCapital: value,
+      clearManualCapital: value == null,
+      capitalTitle: title,
+      clearCapitalTitle: title == null,
+    );
+  }
+
+  void setManualSold(double? value, {String? title}) {
+    state = state.copyWith(
+      manualSold: value,
+      clearManualSold: value == null,
+      soldTitle: title,
+      clearSoldTitle: title == null,
+    );
+  }
+
+  void setManualProfit(double? value, {String? title}) {
+    state = state.copyWith(
+      manualProfit: value,
+      clearManualProfit: value == null,
+      profitTitle: title,
+      clearProfitTitle: title == null,
+    );
+  }
+
+  void resetMetricsToZero() {
+    state = state.copyWith(
+      manualCapital: 0.0,
+      manualSold: 0.0,
+      manualProfit: 0.0,
+    );
+  }
+
+  void revertAllToAuto() {
+    state = state.copyWith(
+      clearManualCapital: true,
+      clearManualSold: true,
+      clearManualProfit: true,
+      clearCapitalTitle: true,
+      clearSoldTitle: true,
+      clearProfitTitle: true,
+    );
   }
 
   void resetToDefaults() {

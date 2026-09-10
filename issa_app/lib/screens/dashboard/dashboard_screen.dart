@@ -239,7 +239,6 @@ class DashboardScreen extends ConsumerWidget {
                             'Top greeting banner with business snapshot',
                             style: TextStyle(fontSize: 12)),
                         value: showBanner,
-                        activeColor: AppColors.primary,
                         onChanged: (val) =>
                             setModalState(() => showBanner = val),
                       ),
@@ -251,7 +250,6 @@ class DashboardScreen extends ConsumerWidget {
                         subtitle: const Text('Total capital in stock',
                             style: TextStyle(fontSize: 12)),
                         value: showCapital,
-                        activeColor: AppColors.primary,
                         onChanged: (val) =>
                             setModalState(() => showCapital = val),
                       ),
@@ -263,7 +261,6 @@ class DashboardScreen extends ConsumerWidget {
                         subtitle: const Text('All-time gross sales',
                             style: TextStyle(fontSize: 12)),
                         value: showSold,
-                        activeColor: AppColors.primary,
                         onChanged: (val) => setModalState(() => showSold = val),
                       ),
                       SwitchListTile.adaptive(
@@ -274,7 +271,6 @@ class DashboardScreen extends ConsumerWidget {
                         subtitle: const Text('All-time net profit',
                             style: TextStyle(fontSize: 12)),
                         value: showProfit,
-                        activeColor: AppColors.primary,
                         onChanged: (val) =>
                             setModalState(() => showProfit = val),
                       ),
@@ -286,7 +282,6 @@ class DashboardScreen extends ConsumerWidget {
                         subtitle: const Text('Daily profit trends graph',
                             style: TextStyle(fontSize: 12)),
                         value: showChart,
-                        activeColor: AppColors.primary,
                         onChanged: (val) =>
                             setModalState(() => showChart = val),
                       ),
@@ -298,7 +293,6 @@ class DashboardScreen extends ConsumerWidget {
                         subtitle: const Text('Latest sales transactions',
                             style: TextStyle(fontSize: 12)),
                         value: showSales,
-                        activeColor: AppColors.primary,
                         onChanged: (val) =>
                             setModalState(() => showSales = val),
                       ),
@@ -316,7 +310,6 @@ class DashboardScreen extends ConsumerWidget {
                             'Estimated total value, profit & margin',
                             style: TextStyle(fontSize: 12)),
                         value: showFutureBanner,
-                        activeColor: AppColors.primary,
                         onChanged: (val) =>
                             setModalState(() => showFutureBanner = val),
                       ),
@@ -329,7 +322,6 @@ class DashboardScreen extends ConsumerWidget {
                             'Individual product projection breakdowns',
                             style: TextStyle(fontSize: 12)),
                         value: showFutureBreakdown,
-                        activeColor: AppColors.primary,
                         onChanged: (val) =>
                             setModalState(() => showFutureBreakdown = val),
                       ),
@@ -570,9 +562,17 @@ class _OverviewTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(dashboardSettingsProvider);
     final statsAsync = ref.watch(saleStatsProvider);
     final capitalAsync = ref.watch(totalCapitalProvider);
     final dailyAsync = ref.watch(dailyProfitsProvider);
+
+    final allOverviewHidden = !settings.showWelcomeBanner &&
+        !settings.showCapitalTile &&
+        !settings.showSoldTile &&
+        !settings.showProfitTile &&
+        !settings.showProfitChart &&
+        !settings.showRecentSales;
 
     return RefreshIndicator(
       color: AppColors.primary,
@@ -586,142 +586,166 @@ class _OverviewTab extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
           // ── Welcome section ──────────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFB79CED), Color(0xFF9B87C4)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Welcome back! 👋',
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Here\'s your business snapshot.',
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withAlpha(204),
-                        ),
-                      ),
-                    ],
-                  ),
+          if (settings.showWelcomeBanner) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFB79CED), Color(0xFF9B87C4)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const Icon(Icons.storefront_rounded,
-                    color: Colors.white54, size: 48),
-              ],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          settings.welcomeTitle,
+                          style: const TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          settings.welcomeSubtitle,
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withAlpha(204),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.storefront_rounded,
+                      color: Colors.white54, size: 48),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: 20),
+          ],
 
-          const SizedBox(height: 20),
+          if (allOverviewHidden) ...[
+            const SizedBox(height: 40),
+            const EmptyState(
+              icon: Icons.dashboard_customize_outlined,
+              title: 'Overview cards hidden',
+              subtitle:
+                  'All overview cards are currently hidden. Tap the menu (...) in the top right and select "Edit Dashboard" to enable cards.',
+            ),
+          ],
 
           // ── Stat tiles ───────────────────────────────────────────────────
-          const SectionHeader(title: 'OVERVIEW'),
-          const SizedBox(height: 12),
+          if (settings.showCapitalTile ||
+              settings.showSoldTile ||
+              settings.showProfitTile) ...[
+            const SectionHeader(title: 'OVERVIEW'),
+            const SizedBox(height: 12),
+          ],
 
           // Capital tile
-          capitalAsync.when(
-            loading: () => _LoadingTile(),
-            error: (e, _) => const _ErrorTile(label: 'Capital'),
-            data: (capital) => StatTile(
-              label: 'Total Capital',
-              value: formatPeso(capital),
-              gradient: AppColors.capitalGradient,
-              icon: Icons.account_balance_wallet_rounded,
-              subtitle: 'Current inventory value',
+          if (settings.showCapitalTile) ...[
+            capitalAsync.when(
+              loading: () => _LoadingTile(),
+              error: (e, _) => const _ErrorTile(label: 'Capital'),
+              data: (capital) => StatTile(
+                label: 'Total Capital',
+                value: formatPeso(capital),
+                gradient: AppColors.capitalGradient,
+                icon: Icons.account_balance_wallet_rounded,
+                subtitle: 'Current inventory value',
+              ),
             ),
-          ),
+            const SizedBox(height: 12),
+          ],
 
-          const SizedBox(height: 12),
-
-          statsAsync.when(
-            loading: () => Column(
-              children: [
-                _LoadingTile(),
-                const SizedBox(height: 12),
-                _LoadingTile(),
-              ],
+          if (settings.showSoldTile || settings.showProfitTile) ...[
+            statsAsync.when(
+              loading: () => Column(
+                children: [
+                  if (settings.showSoldTile) ...[
+                    _LoadingTile(),
+                    if (settings.showProfitTile) const SizedBox(height: 12),
+                  ],
+                  if (settings.showProfitTile) _LoadingTile(),
+                ],
+              ),
+              error: (e, _) => const _ErrorTile(label: 'Stats'),
+              data: (stats) => Column(
+                children: [
+                  if (settings.showSoldTile) ...[
+                    StatTile(
+                      label: 'Total Sold',
+                      value: formatPeso(stats.totalSold),
+                      gradient: AppColors.soldGradient,
+                      icon: Icons.shopping_bag_rounded,
+                      subtitle: 'All-time revenue',
+                    ),
+                    if (settings.showProfitTile) const SizedBox(height: 12),
+                  ],
+                  if (settings.showProfitTile)
+                    StatTile(
+                      label: 'Total Profit',
+                      value: formatPeso(stats.totalProfit),
+                      gradient: stats.totalProfit >= 0
+                          ? AppColors.profitGradient
+                          : [AppColors.error, const Color(0xFFB23636)],
+                      icon: Icons.trending_up_rounded,
+                      subtitle: 'Based on snapshotted cost prices',
+                    ),
+                ],
+              ),
             ),
-            error: (e, _) => const _ErrorTile(label: 'Stats'),
-            data: (stats) => Column(
-              children: [
-                StatTile(
-                  label: 'Total Sold',
-                  value: formatPeso(stats.totalSold),
-                  gradient: AppColors.soldGradient,
-                  icon: Icons.shopping_bag_rounded,
-                  subtitle: 'All-time revenue',
-                ),
-                const SizedBox(height: 12),
-                StatTile(
-                  label: 'Total Profit',
-                  value: formatPeso(stats.totalProfit),
-                  gradient: stats.totalProfit >= 0
-                      ? AppColors.profitGradient
-                      : [AppColors.error, const Color(0xFFB23636)],
-                  icon: Icons.trending_up_rounded,
-                  subtitle: 'Based on snapshotted cost prices',
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
+          ],
 
           // ── Profit chart ─────────────────────────────────────────────────
-          const SectionHeader(title: 'PROFIT (LAST 30 DAYS)'),
-          const SizedBox(height: 12),
-
-          dailyAsync.when(
-            loading: () => const SizedBox(
-              height: 200,
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => const _ErrorTile(label: 'Chart'),
-            data: (points) => points.isEmpty
-                ? Container(
-                    height: 160,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.divider),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'No sales yet — chart will appear here.',
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          color: AppColors.textHint,
+          if (settings.showProfitChart) ...[
+            SectionHeader(title: 'PROFIT (LAST ${settings.chartDays} DAYS)'),
+            const SizedBox(height: 12),
+            dailyAsync.when(
+              loading: () => const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => const _ErrorTile(label: 'Chart'),
+              data: (points) => points.isEmpty
+                  ? Container(
+                      height: 160,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.divider),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'No sales yet — chart will appear here.',
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            color: AppColors.textHint,
+                          ),
                         ),
                       ),
-                    ),
-                  )
-                : _ProfitChart(points: points),
-          ),
-
-          const SizedBox(height: 24),
+                    )
+                  : _ProfitChart(points: points),
+            ),
+            const SizedBox(height: 24),
+          ],
 
           // ── Recent sales list ────────────────────────────────────────────
-          const SectionHeader(title: 'RECENT SALES'),
-          const SizedBox(height: 12),
-          _RecentSalesList(),
+          if (settings.showRecentSales) ...[
+            const SectionHeader(title: 'RECENT SALES'),
+            const SizedBox(height: 12),
+            _RecentSalesList(),
+          ],
         ],
       ),
     );
@@ -737,6 +761,7 @@ class _FutureMetricsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(dashboardSettingsProvider);
     final summariesAsync = ref.watch(inventorySummariesProvider);
 
     return RefreshIndicator(
@@ -794,8 +819,19 @@ class _FutureMetricsTab extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
+              if (!settings.showFutureBanner &&
+                  !settings.showFutureBreakdown) ...[
+                const SizedBox(height: 40),
+                const EmptyState(
+                  icon: Icons.dashboard_customize_outlined,
+                  title: 'Future metric cards hidden',
+                  subtitle:
+                      'All future projection cards are currently hidden. Tap the menu (...) in the top right and select "Edit Dashboard" to enable cards.',
+                ),
+              ],
               // ── Future projections hero banner ─────────────────────────────
-              Container(
+              if (settings.showFutureBanner) ...[
+                Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
@@ -1013,12 +1049,14 @@ class _FutureMetricsTab extends ConsumerWidget {
                   ),
                 ],
               ),
+              ],
 
               const SizedBox(height: 24),
 
               // ── Product-by-Product Breakdown ──────────────────────────────
-              const SectionHeader(title: 'PRODUCT-BY-PRODUCT PROJECTIONS'),
-              const SizedBox(height: 12),
+              if (settings.showFutureBreakdown) ...[
+                const SectionHeader(title: 'PRODUCT-BY-PRODUCT PROJECTIONS'),
+                const SizedBox(height: 12),
 
               ...inStockSummaries.map((s) {
                 final hasSellPrice = s.product.effectiveSellingPrice > 0;
@@ -1207,6 +1245,7 @@ class _FutureMetricsTab extends ConsumerWidget {
                   ),
                 );
               }),
+              ],
             ],
           );
         },

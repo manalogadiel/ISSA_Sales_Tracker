@@ -283,4 +283,43 @@ void main() {
     prod = await invDao.findProductByNameCaseInsensitive('Chicken Breast');
     expect(prod!.effectiveSellingPrice, 0.0);
   });
+
+  test('resetAllSales deletes sales history and restores inventory quantities', () async {
+    final prodId = await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Ground Pork')),
+    );
+    await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: prodId,
+        quantityAdded: 10.0,
+        remainingQuantity: 10.0,
+        costPrice: 150.0,
+        source: BatchSource.manual,
+      ),
+    );
+
+    // Record a sale of 4kg
+    final batches = await invDao.batchesForProduct(prodId);
+    await salesDao.recordSale(
+      productId: prodId,
+      quantitySold: 4.0,
+      sellPrice: 200.0,
+      availableBatches: batches,
+    );
+
+    var stats = await salesDao.watchStats().first;
+    expect(stats.totalSold, 800.0);
+    var remainingBatches = await invDao.batchesForProduct(prodId);
+    expect(remainingBatches.first.remainingQuantity, 6.0);
+
+    // Reset all sales
+    await salesDao.resetAllSales();
+
+    stats = await salesDao.watchStats().first;
+    expect(stats.totalSold, 0.0);
+    expect(stats.totalProfit, 0.0);
+
+    remainingBatches = await invDao.batchesForProduct(prodId);
+    expect(remainingBatches.first.remainingQuantity, 10.0);
+  });
 }

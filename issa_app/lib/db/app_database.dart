@@ -211,6 +211,30 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         0, (acc, b) => acc + b.remainingQuantity * b.costPrice);
   }
 
+  /// Sets remaining quantity of all batches to 0.0, resetting inventory capital to 0.
+  Future<void> resetAllBatchQuantities() async {
+    await (update(capitalBatches)).write(
+      const CapitalBatchesCompanion(remainingQuantity: Value(0.0)),
+    );
+  }
+
+  /// Deletes all batches and sale allocations.
+  Future<void> clearAllBatches() async {
+    await transaction(() async {
+      await delete(saleAllocations).go();
+      await delete(capitalBatches).go();
+    });
+  }
+
+  /// Complete reset of all data (sales, batches, allocations).
+  Future<void> resetAllData() async {
+    await transaction(() async {
+      await delete(saleAllocations).go();
+      await delete(sales).go();
+      await delete(capitalBatches).go();
+    });
+  }
+
   /// Watch inventory summaries reactively.
   /// Watches both Products and CapitalBatches via join so any batch deduction
   /// immediately triggers a stream update and updates the UI everywhere.
