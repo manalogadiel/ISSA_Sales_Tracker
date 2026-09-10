@@ -317,21 +317,27 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
     try {
       final invDao = ref.read(inventoryDaoProvider);
       final products = await invDao.watchAllProducts().first;
+      final Map<String, int> productMap = {
+        for (final p in products) p.name.toLowerCase(): p.id,
+      };
 
       for (final item in confirmed) {
-        if (item.productName.trim().isEmpty) continue;
+        final cleanName = item.productName.trim();
+        if (cleanName.isEmpty) continue;
 
-        // Find existing product by name (case-insensitive)
-        final existing = products.where((p) =>
-            p.name.toLowerCase() == item.productName.trim().toLowerCase());
+        final key = cleanName.toLowerCase();
+        int? productId = productMap[key];
 
-        int productId;
-        if (existing.isNotEmpty) {
-          productId = existing.first.id;
-        } else {
-          productId = await invDao.insertProduct(
-            ProductsCompanion.insert(name: item.productName.trim()),
-          );
+        if (productId == null) {
+          final found = await invDao.findProductByNameCaseInsensitive(cleanName);
+          if (found != null) {
+            productId = found.id;
+          } else {
+            productId = await invDao.insertProduct(
+              ProductsCompanion.insert(name: cleanName),
+            );
+          }
+          productMap[key] = productId;
         }
 
         final qty = item.quantity > 0 ? item.quantity : 1.0;

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:issa_app/db/app_database.dart';
 
@@ -138,5 +138,63 @@ void main() {
     expect(summaries.length, 1);
     expect(summaries.first.totalQuantity, 10.0);
     expect(summaries.first.latestCostPrice, 50.0);
+  });
+
+  test('Case-insensitive product lookup and selling price update', () async {
+    final prodId = await invDao.insertProduct(
+      const ProductsCompanion(
+        name: Value('Garlic Pork Longganisa'),
+        sellingPrice: Value(220.0),
+      ),
+    );
+
+    // Case-insensitive lookup variations
+    final matchLower = await invDao.findProductByNameCaseInsensitive('garlic pork longganisa');
+    expect(matchLower, isNotNull);
+    expect(matchLower!.id, prodId);
+    expect(matchLower.name, 'Garlic Pork Longganisa');
+    expect(matchLower.sellingPrice, 220.0);
+
+    final matchUpper = await invDao.findProductByNameCaseInsensitive('GARLIC PORK LONGGANISA');
+    expect(matchUpper, isNotNull);
+    expect(matchUpper!.id, prodId);
+
+    // Update selling price
+    await invDao.updateProductSellingPrice(id: prodId, sellingPrice: 260.0);
+    final updated = await invDao.findProductByNameCaseInsensitive('Garlic Pork Longganisa');
+    expect(updated!.sellingPrice, 260.0);
+  });
+
+  test('watchInventorySummaries reactively updates when sales deduct stock', () async {
+    final prodId = await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Tocino')),
+    );
+
+    await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: prodId,
+        quantityAdded: 10.0,
+        remainingQuantity: 10.0,
+        costPrice: 180.0,
+        source: BatchSource.manual,
+      ),
+    );
+
+    // Initial stock
+    var summaries = await invDao.watchInventorySummaries().first;
+    expect(summaries.first.totalQuantity, 10.0);
+
+    // Record sale of 4kg
+    final batches = await invDao.batchesForProduct(prodId);
+    await salesDao.recordSale(
+      productId: prodId,
+      quantitySold: 4.0,
+      sellPrice: 240.0,
+      availableBatches: batches,
+    );
+
+    // The stream should immediately reflect 6.0kg
+    summaries = await invDao.watchInventorySummaries().first;
+    expect(summaries.first.totalQuantity, 6.0);
   });
 }

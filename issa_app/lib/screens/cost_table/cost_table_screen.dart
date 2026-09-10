@@ -4,7 +4,7 @@ import '../../providers/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-enum _SortBy { name, price }
+enum _SortBy { name, costPrice, sellingPrice }
 enum _SortDir { asc, desc }
 
 class CostTableScreen extends ConsumerStatefulWidget {
@@ -18,13 +18,75 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
   _SortBy _sortBy = _SortBy.name;
   _SortDir _sortDir = _SortDir.asc;
 
+  Future<void> _showEditSellingPriceDialog(
+      BuildContext context, Product product) async {
+    final ctrl = TextEditingController(
+      text: product.sellingPrice > 0
+          ? product.sellingPrice.toStringAsFixed(2)
+          : '',
+    );
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Selling Price: ${product.name}'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: ctrl,
+                decoration: const InputDecoration(
+                  labelText: 'Selling price per kg (₱)',
+                  prefixText: '₱ ',
+                  prefixIcon: Icon(Icons.sell_outlined),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                autofocus: true,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Enter price';
+                  final n = double.tryParse(v.trim());
+                  if (n == null || n < 0) return 'Invalid price';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              final price = double.parse(ctrl.text.trim());
+              await ref
+                  .read(inventoryDaoProvider)
+                  .updateProductSellingPrice(
+                    id: product.id,
+                    sellingPrice: price,
+                  );
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final summaries = ref.watch(inventorySummariesProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cost Price Table'),
+        title: const Text('Prices & Cost Table'),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort_rounded),
@@ -38,11 +100,17 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                   case 'name_desc':
                     _sortBy = _SortBy.name;
                     _sortDir = _SortDir.desc;
-                  case 'price_asc':
-                    _sortBy = _SortBy.price;
+                  case 'cost_asc':
+                    _sortBy = _SortBy.costPrice;
                     _sortDir = _SortDir.asc;
-                  case 'price_desc':
-                    _sortBy = _SortBy.price;
+                  case 'cost_desc':
+                    _sortBy = _SortBy.costPrice;
+                    _sortDir = _SortDir.desc;
+                  case 'sell_asc':
+                    _sortBy = _SortBy.sellingPrice;
+                    _sortDir = _SortDir.asc;
+                  case 'sell_desc':
+                    _sortBy = _SortBy.sellingPrice;
                     _sortDir = _SortDir.desc;
                 }
               });
@@ -50,8 +118,10 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'name_asc', child: Text('Name A→Z')),
               PopupMenuItem(value: 'name_desc', child: Text('Name Z→A')),
-              PopupMenuItem(value: 'price_asc', child: Text('Price Low→High')),
-              PopupMenuItem(value: 'price_desc', child: Text('Price High→Low')),
+              PopupMenuItem(value: 'cost_asc', child: Text('Cost Low→High')),
+              PopupMenuItem(value: 'cost_desc', child: Text('Cost High→Low')),
+              PopupMenuItem(value: 'sell_asc', child: Text('Sell Low→High')),
+              PopupMenuItem(value: 'sell_desc', child: Text('Sell High→Low')),
             ],
           ),
           const SizedBox(width: 8),
@@ -75,8 +145,10 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
             int cmp;
             if (_sortBy == _SortBy.name) {
               cmp = a.product.name.compareTo(b.product.name);
-            } else {
+            } else if (_sortBy == _SortBy.costPrice) {
               cmp = a.latestCostPrice.compareTo(b.latestCostPrice);
+            } else {
+              cmp = a.product.sellingPrice.compareTo(b.product.sellingPrice);
             }
             return _sortDir == _SortDir.asc ? cmp : -cmp;
           });
@@ -87,7 +159,7 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
               Container(
                 margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
+                    horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: AppColors.primaryDeep,
                   borderRadius: const BorderRadius.vertical(
@@ -116,16 +188,35 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                     Expanded(
                       flex: 2,
                       child: _HeaderCell(
-                        label: 'Latest Price',
-                        active: _sortBy == _SortBy.price,
+                        label: 'Cost/kg',
+                        active: _sortBy == _SortBy.costPrice,
                         dir: _sortDir,
                         onTap: () => setState(() {
-                          if (_sortBy == _SortBy.price) {
+                          if (_sortBy == _SortBy.costPrice) {
                             _sortDir = _sortDir == _SortDir.asc
                                 ? _SortDir.desc
                                 : _SortDir.asc;
                           } else {
-                            _sortBy = _SortBy.price;
+                            _sortBy = _SortBy.costPrice;
+                            _sortDir = _SortDir.asc;
+                          }
+                        }),
+                        align: TextAlign.right,
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: _HeaderCell(
+                        label: 'Sell/kg',
+                        active: _sortBy == _SortBy.sellingPrice,
+                        dir: _sortDir,
+                        onTap: () => setState(() {
+                          if (_sortBy == _SortBy.sellingPrice) {
+                            _sortDir = _sortDir == _SortDir.asc
+                                ? _SortDir.desc
+                                : _SortDir.asc;
+                          } else {
+                            _sortBy = _SortBy.sellingPrice;
                             _sortDir = _SortDir.asc;
                           }
                         }),
@@ -135,7 +226,7 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                     const Expanded(
                       flex: 2,
                       child: Text(
-                        'In Stock',
+                        'Stock',
                         textAlign: TextAlign.right,
                         style: TextStyle(
                           fontFamily: 'Nunito',
@@ -168,21 +259,23 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                       return Container(
                         color: i.isEven ? AppColors.background : AppColors.surface,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                            horizontal: 14, vertical: 12),
                         child: Row(
                           children: [
+                            // Product Name
                             Expanded(
                               flex: 3,
                               child: Text(
                                 s.product.name,
                                 style: const TextStyle(
                                   fontFamily: 'Nunito',
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.textPrimary,
                                 ),
                               ),
                             ),
+                            // Cost / kg
                             Expanded(
                               flex: 2,
                               child: Text(
@@ -190,12 +283,60 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                                 textAlign: TextAlign.right,
                                 style: const TextStyle(
                                   fontFamily: 'Nunito',
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.primaryDeep,
                                 ),
                               ),
                             ),
+                            // Sell / kg (Editable)
+                            Expanded(
+                              flex: 2,
+                              child: InkWell(
+                                onTap: () => _showEditSellingPriceDialog(
+                                    context, s.product),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 4, horizontal: 2),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          s.product.sellingPrice > 0
+                                              ? formatPeso(s.product.sellingPrice)
+                                              : 'Set ₱',
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                            fontFamily: 'Nunito',
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: s.product.sellingPrice > 0
+                                                ? AppColors.success
+                                                : AppColors.warning,
+                                            decoration:
+                                                s.product.sellingPrice == 0
+                                                    ? TextDecoration.underline
+                                                    : null,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Icon(
+                                        Icons.edit_outlined,
+                                        size: 13,
+                                        color: s.product.sellingPrice > 0
+                                            ? AppColors.success.withAlpha(160)
+                                            : AppColors.warning,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // In Stock
                             Expanded(
                               flex: 2,
                               child: Text(
@@ -203,8 +344,8 @@ class _CostTableScreenState extends ConsumerState<CostTableScreen> {
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
                                   fontFamily: 'Nunito',
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                   color: isLow
                                       ? AppColors.error
                                       : AppColors.textSecondary,

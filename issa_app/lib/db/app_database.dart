@@ -12,10 +12,12 @@ part 'app_database.g.dart';
 // Tables
 // ────────────────────────────────────────────────────────────────────────────
 
-/// Products table — only id and name stored; derived fields computed from batches.
+/// Products table — id, name, and default sellingPrice stored; derived fields computed from batches.
 class Products extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 100)();
+  RealColumn get sellingPrice =>
+      real().withDefault(const Constant(0.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -93,9 +95,23 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Future<int> insertProduct(ProductsCompanion companion) =>
       into(products).insert(companion);
 
+  Future<Product?> findProductByNameCaseInsensitive(String name) async {
+    final query = select(products)
+      ..where((t) => t.name.lower().equals(name.trim().toLowerCase()));
+    return query.getSingleOrNull();
+  }
+
   Future<void> updateProductName({required int id, required String name}) =>
       (update(products)..where((t) => t.id.equals(id)))
           .write(ProductsCompanion(name: Value(name)));
+
+  Future<void> updateProductSellingPrice({
+    required int id,
+    required double sellingPrice,
+  }) =>
+      (update(products)..where((t) => t.id.equals(id))).write(
+        ProductsCompanion(sellingPrice: Value(sellingPrice)),
+      );
 
   Future<void> deleteProduct(int id) =>
       (delete(products)..where((t) => t.id.equals(id))).go();
@@ -137,25 +153,39 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         0, (acc, b) => acc + b.remainingQuantity * b.costPrice);
   }
 
-  Stream<List<InventorySummary>> watchInventorySummaries() =>
-      select(products).watch().asyncMap((prods) async {
-        final summaries = <InventorySummary>[];
-        for (final prod in prods) {
-          final batches = await batchesForProduct(prod.id);
-          final active = batches.where((b) => b.remainingQuantity > 0).toList();
-          final totalQty =
-              active.fold<double>(0, (s, b) => s + b.remainingQuantity);
-          final latestCost =
-              batches.isNotEmpty ? batches.last.costPrice : 0.0;
-          summaries.add(InventorySummary(
-            product: prod,
-            totalQuantity: totalQty,
-            latestCostPrice: latestCost,
-            batches: batches,
-          ));
-        }
-        return summaries;
-      });
+  /// Watch inventory summaries reactively.
+  /// Watches both Products and CapitalBatches via join so any batch deduction
+  /// immediately triggers a stream update and updates the UI everywhere.
+  Stream<List<InventorySummary>> watchInventorySummaries() {
+    final query = select(products).join([
+      leftOuterJoin(
+        capitalBatches,
+        capitalBatches.productId.equalsExp(products.id),
+      ),
+    ]);
+
+    return query.watch().asyncMap((_) async {
+      final prods = await (select(products)
+            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          .get();
+      final summaries = <InventorySummary>[];
+      for (final prod in prods) {
+        final batches = await batchesForProduct(prod.id);
+        final active = batches.where((b) => b.remainingQuantity > 0).toList();
+        final totalQty =
+            active.fold<double>(0, (s, b) => s + b.remainingQuantity);
+        final latestCost =
+            batches.isNotEmpty ? batches.last.costPrice : 0.0;
+        summaries.add(InventorySummary(
+          product: prod,
+          totalQuantity: totalQty,
+          latestCostPrice: latestCost,
+          batches: batches,
+        ));
+      }
+      return summaries;
+    });
+  }
 }
 
 @DriftAccessor(tables: [Sales, SaleAllocations, CapitalBatches, Products])
@@ -290,12 +320,17 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(products, products.sellingPrice);
+          }
         },
       );
 }

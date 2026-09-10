@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/providers.dart';
 import '../../theme/app_theme.dart';
+import 'package:drift/drift.dart' show Value;
 import '../../widgets/common_widgets.dart';
 
 class InventoryScreen extends ConsumerWidget {
@@ -57,61 +58,84 @@ class InventoryScreen extends ConsumerWidget {
   Future<void> _showAddProductDialog(BuildContext context, WidgetRef ref) async {
     final nameCtrl = TextEditingController();
     final qtyCtrl = TextEditingController(text: '1');
-    final priceCtrl = TextEditingController();
+    final costPriceCtrl = TextEditingController();
+    final sellingPriceCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('New Product'),
+        title: const Text('New Product / Restock'),
         content: Form(
           key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Product name',
-                  prefixIcon: Icon(Icons.label_outline_rounded),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Product name',
+                    prefixIcon: Icon(Icons.label_outline_rounded),
+                    helperText: 'Case-insensitive (matches existing item)',
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
-                textCapitalization: TextCapitalization.words,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: qtyCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity (kg)',
-                  suffixText: 'kg',
-                  prefixIcon: Icon(Icons.scale_outlined),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: qtyCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity (kg)',
+                    suffixText: 'kg',
+                    prefixIcon: Icon(Icons.scale_outlined),
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) {
+                    final n = double.tryParse(v ?? '');
+                    if (n == null || n <= 0) return 'Enter valid quantity';
+                    return null;
+                  },
                 ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n <= 0) return 'Enter valid quantity';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: priceCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Cost price per kg (₱)',
-                  prefixIcon: Icon(Icons.price_change_outlined),
-                  prefixText: '₱ ',
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: costPriceCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Cost price per kg (₱)',
+                    prefixIcon: Icon(Icons.price_change_outlined),
+                    prefixText: '₱ ',
+                    helperText: 'Your purchase/capital cost',
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) {
+                    final n = double.tryParse(v ?? '');
+                    if (n == null || n < 0) return 'Enter valid cost price';
+                    return null;
+                  },
                 ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Enter valid price';
-                  return null;
-                },
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: sellingPriceCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Selling price per kg (₱)',
+                    prefixIcon: Icon(Icons.sell_outlined),
+                    prefixText: '₱ ',
+                    helperText: 'Default price when selling (optional)',
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    final n = double.tryParse(v.trim());
+                    if (n == null || n < 0) return 'Enter valid selling price';
+                    return null;
+                  },
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -123,18 +147,41 @@ class InventoryScreen extends ConsumerWidget {
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
               final dao = ref.read(inventoryDaoProvider);
-              final productId = await dao.insertProduct(
-                ProductsCompanion.insert(name: nameCtrl.text.trim()),
-              );
+              final trimmedName = nameCtrl.text.trim();
+              final existing =
+                  await dao.findProductByNameCaseInsensitive(trimmedName);
+
+              final sellPrice =
+                  double.tryParse(sellingPriceCtrl.text.trim()) ?? 0.0;
+
+              int productId;
+              if (existing != null) {
+                productId = existing.id;
+                if (sellPrice > 0) {
+                  await dao.updateProductSellingPrice(
+                    id: productId,
+                    sellingPrice: sellPrice,
+                  );
+                }
+              } else {
+                productId = await dao.insertProduct(
+                  ProductsCompanion.insert(
+                    name: trimmedName,
+                    sellingPrice: Value(sellPrice),
+                  ),
+                );
+              }
+
               await dao.insertBatch(
                 CapitalBatchesCompanion.insert(
                   productId: productId,
-                  quantityAdded: double.parse(qtyCtrl.text),
-                  remainingQuantity: double.parse(qtyCtrl.text),
-                  costPrice: double.parse(priceCtrl.text),
+                  quantityAdded: double.parse(qtyCtrl.text.trim()),
+                  remainingQuantity: double.parse(qtyCtrl.text.trim()),
+                  costPrice: double.parse(costPriceCtrl.text.trim()),
                   source: BatchSource.manual,
                 ),
               );
+
               if (ctx.mounted) Navigator.pop(ctx);
             },
             style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
@@ -233,9 +280,12 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              '${formatPeso(s.latestCostPrice)}/kg latest',
-                              style: Theme.of(context).textTheme.bodySmall,
+                            Expanded(
+                              child: Text(
+                                'Sell: ${s.product.sellingPrice > 0 ? formatPeso(s.product.sellingPrice) : 'Unset'} · Cost: ${formatPeso(s.latestCostPrice)}/kg',
+                                style: Theme.of(context).textTheme.bodySmall,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
@@ -243,6 +293,15 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                     ),
                   ),
                   // Actions
+                  IconButton(
+                    icon: const Icon(Icons.sell_outlined),
+                    color: s.product.sellingPrice > 0
+                        ? AppColors.primaryDeep
+                        : AppColors.warning,
+                    tooltip: 'Set selling price',
+                    onPressed: () =>
+                        _showEditSellingPriceDialog(context, s.product),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.add_box_outlined),
                     color: AppColors.primaryDeep,
@@ -356,6 +415,65 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
             },
             style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
             child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEditSellingPriceDialog(
+      BuildContext context, Product product) async {
+    final ctrl = TextEditingController(
+      text: product.sellingPrice > 0
+          ? product.sellingPrice.toStringAsFixed(2)
+          : '',
+    );
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Selling Price: ${product.name}'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: ctrl,
+                decoration: const InputDecoration(
+                  labelText: 'Selling price per kg (₱)',
+                  prefixText: '₱ ',
+                  prefixIcon: Icon(Icons.sell_outlined),
+                  helperText: 'Default price when selling this item',
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  final n = double.tryParse(v ?? '');
+                  if (n == null || n < 0) return 'Enter valid selling price';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              final val = double.parse(ctrl.text.trim());
+              await ref.read(inventoryDaoProvider).updateProductSellingPrice(
+                    id: product.id,
+                    sellingPrice: val,
+                  );
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
           ),
         ],
       ),

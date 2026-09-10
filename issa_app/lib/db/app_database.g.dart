@@ -79,6 +79,18 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _sellingPriceMeta = const VerificationMeta(
+    'sellingPrice',
+  );
+  @override
+  late final GeneratedColumn<double> sellingPrice = GeneratedColumn<double>(
+    'selling_price',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -92,7 +104,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, name, createdAt];
+  List<GeneratedColumn> get $columns => [id, name, sellingPrice, createdAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -115,6 +127,15 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('selling_price')) {
+      context.handle(
+        _sellingPriceMeta,
+        sellingPrice.isAcceptableOrUnknown(
+          data['selling_price']!,
+          _sellingPriceMeta,
+        ),
+      );
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -139,6 +160,10 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      sellingPrice: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}selling_price'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -155,10 +180,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
 class Product extends DataClass implements Insertable<Product> {
   final int id;
   final String name;
+  final double sellingPrice;
   final DateTime createdAt;
   const Product({
     required this.id,
     required this.name,
+    required this.sellingPrice,
     required this.createdAt,
   });
   @override
@@ -166,6 +193,7 @@ class Product extends DataClass implements Insertable<Product> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
+    map['selling_price'] = Variable<double>(sellingPrice);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -174,6 +202,7 @@ class Product extends DataClass implements Insertable<Product> {
     return ProductsCompanion(
       id: Value(id),
       name: Value(name),
+      sellingPrice: Value(sellingPrice),
       createdAt: Value(createdAt),
     );
   }
@@ -186,6 +215,7 @@ class Product extends DataClass implements Insertable<Product> {
     return Product(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      sellingPrice: serializer.fromJson<double>(json['sellingPrice']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -195,19 +225,29 @@ class Product extends DataClass implements Insertable<Product> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
+      'sellingPrice': serializer.toJson<double>(sellingPrice),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
 
-  Product copyWith({int? id, String? name, DateTime? createdAt}) => Product(
+  Product copyWith({
+    int? id,
+    String? name,
+    double? sellingPrice,
+    DateTime? createdAt,
+  }) => Product(
     id: id ?? this.id,
     name: name ?? this.name,
+    sellingPrice: sellingPrice ?? this.sellingPrice,
     createdAt: createdAt ?? this.createdAt,
   );
   Product copyWithCompanion(ProductsCompanion data) {
     return Product(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      sellingPrice: data.sellingPrice.present
+          ? data.sellingPrice.value
+          : this.sellingPrice,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -217,44 +257,51 @@ class Product extends DataClass implements Insertable<Product> {
     return (StringBuffer('Product(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('sellingPrice: $sellingPrice, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, createdAt);
+  int get hashCode => Object.hash(id, name, sellingPrice, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Product &&
           other.id == this.id &&
           other.name == this.name &&
+          other.sellingPrice == this.sellingPrice &&
           other.createdAt == this.createdAt);
 }
 
 class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<int> id;
   final Value<String> name;
+  final Value<double> sellingPrice;
   final Value<DateTime> createdAt;
   const ProductsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.sellingPrice = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   ProductsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
+    this.sellingPrice = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : name = Value(name);
   static Insertable<Product> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<double>? sellingPrice,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (sellingPrice != null) 'selling_price': sellingPrice,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -262,11 +309,13 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   ProductsCompanion copyWith({
     Value<int>? id,
     Value<String>? name,
+    Value<double>? sellingPrice,
     Value<DateTime>? createdAt,
   }) {
     return ProductsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      sellingPrice: sellingPrice ?? this.sellingPrice,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -280,6 +329,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (sellingPrice.present) {
+      map['selling_price'] = Variable<double>(sellingPrice.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -291,6 +343,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     return (StringBuffer('ProductsCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('sellingPrice: $sellingPrice, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1550,11 +1603,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
 typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   Value<int> id,
   required String name,
+  Value<double> sellingPrice,
   Value<DateTime> createdAt,
 });
 typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<int> id,
   Value<String> name,
+  Value<double> sellingPrice,
   Value<DateTime> createdAt,
 });
 
@@ -1616,6 +1671,11 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get sellingPrice => $composableBuilder(
+    column: $table.sellingPrice,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1694,6 +1754,11 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get sellingPrice => $composableBuilder(
+    column: $table.sellingPrice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -1714,6 +1779,11 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<double> get sellingPrice => $composableBuilder(
+    column: $table.sellingPrice,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -1795,19 +1865,28 @@ class $$ProductsTableTableManager
               $$ProductsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$ProductsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> name = const Value.absent(),
-            Value<DateTime> createdAt = const Value.absent(),
-          }) => ProductsCompanion(id: id, name: name, createdAt: createdAt),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<double> sellingPrice = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ProductsCompanion(
+                id: id,
+                name: name,
+                sellingPrice: sellingPrice,
+                createdAt: createdAt,
+              ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
+                Value<double> sellingPrice = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => ProductsCompanion.insert(
                 id: id,
                 name: name,
+                sellingPrice: sellingPrice,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0

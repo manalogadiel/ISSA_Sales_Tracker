@@ -76,9 +76,12 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                                   onTap: () => setState(() {
                                     _selectedProduct = s.product;
                                     _quantity = 0.5;
-                                    // Auto-fill sell price = latest cost price
+                                    // Auto-fill sell price = set sellingPrice (or fallback to latest cost price)
+                                    final defaultPrice = s.product.sellingPrice > 0
+                                        ? s.product.sellingPrice
+                                        : s.latestCostPrice;
                                     _priceCtrl.text =
-                                        s.latestCostPrice.toStringAsFixed(2);
+                                        defaultPrice.toStringAsFixed(2);
                                   }),
                                 ))
                             .toList(),
@@ -106,14 +109,18 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: _priceCtrl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Sell price per kg',
                       prefixText: '₱ ',
-                      prefixIcon: Icon(Icons.sell_outlined),
-                      helperText: 'Auto-filled from latest cost price — tap to edit',
+                      prefixIcon: const Icon(Icons.sell_outlined),
+                      helperText: _selectedProduct != null &&
+                              _selectedProduct!.sellingPrice > 0
+                          ? 'Pre-filled from set selling price — tap to edit'
+                          : 'Auto-filled from latest cost price — tap to edit',
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
                   ),
 
                   const SizedBox(height: 24),
@@ -271,7 +278,7 @@ class _ProductOption extends StatelessWidget {
                   ),
                   Text(
                     '${formatKg(summary.totalQuantity)} available · '
-                    '${formatPeso(summary.latestCostPrice)}/kg',
+                    '${summary.product.sellingPrice > 0 ? "Sell: ${formatPeso(summary.product.sellingPrice)}" : "Cost: ${formatPeso(summary.latestCostPrice)}"}/kg',
                     style: const TextStyle(
                       fontFamily: 'Nunito',
                       fontSize: 12,
