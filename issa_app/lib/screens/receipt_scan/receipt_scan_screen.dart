@@ -406,6 +406,7 @@ class _ScanBody extends StatelessWidget {
           // Preview area
           Expanded(
             child: Container(
+              width: double.infinity,
               decoration: BoxDecoration(
                 color: AppColors.accentLight,
                 borderRadius: BorderRadius.circular(20),

@@ -32,6 +32,23 @@ class DashboardScreen extends ConsumerWidget {
               onSelected: (val) async {
                 if (val == 'edit') {
                   _showEditDashboardDialog(context, ref);
+                } else if (val == 'sync_capital') {
+                  ref
+                      .read(dashboardSettingsProvider.notifier)
+                      .setManualCapital(null);
+                  ref.invalidate(totalCapitalProvider);
+                  ref.invalidate(inventorySummariesProvider);
+                  final actual =
+                      await ref.read(inventoryDaoProvider).totalCapital();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            'Total Capital reset to actual inventory: ${formatPeso(actual)}'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
                 } else if (val == 'reset') {
                   final proceed = await _showResetWarningDialog(context);
                   if (proceed == true && context.mounted) {
@@ -48,6 +65,17 @@ class DashboardScreen extends ConsumerWidget {
                           size: 20, color: AppColors.primaryDeep),
                       SizedBox(width: 12),
                       Text('Edit Dashboard'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'sync_capital',
+                  child: Row(
+                    children: [
+                      Icon(Icons.sync_rounded,
+                          size: 20, color: Color(0xFF6B4FB8)),
+                      SizedBox(width: 12),
+                      Text('Reset Capital from Inventory'),
                     ],
                   ),
                 ),
@@ -744,6 +772,54 @@ class DashboardScreen extends ConsumerWidget {
                 style: TextStyle(fontFamily: 'Nunito', fontSize: 14),
               ),
               const SizedBox(height: 16),
+
+              // Option 0: Reset Total Capital based on Inventory
+              Card(
+                elevation: 0,
+                color: const Color(0xFF6B4FB8).withAlpha(16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: const Color(0xFF6B4FB8).withAlpha(70)),
+                ),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFF6B4FB8),
+                    child: Icon(Icons.sync_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  title: const Text('Reset Total Capital to Inventory',
+                      style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: Color(0xFF6B4FB8))),
+                  subtitle: const Text(
+                      'Clears any manual override and recalculates Total Capital live from current inventory stock.',
+                      style: TextStyle(fontFamily: 'Nunito', fontSize: 12)),
+                  onTap: () async {
+                    ref
+                        .read(dashboardSettingsProvider.notifier)
+                        .setManualCapital(null);
+                    ref.invalidate(totalCapitalProvider);
+                    ref.invalidate(inventorySummariesProvider);
+                    final actual =
+                        await ref.read(inventoryDaoProvider).totalCapital();
+                    if (ctx.mounted) {
+                      Navigator.pop(ctx);
+                    }
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              'Total Capital reset to actual inventory: ${formatPeso(actual)}'),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
 
               // Option 1: Set All Cards to ₱0.00 (Display override)
               Card(
