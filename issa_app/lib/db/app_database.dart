@@ -205,6 +205,14 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// Watches real-time total capital in remaining inventory.
+  Stream<double> watchTotalCapital() {
+    return select(capitalBatches).watch().map((rows) {
+      return rows.fold<double>(
+          0.0, (acc, b) => acc + b.remainingQuantity * b.costPrice);
+    });
+  }
+
   Future<double> totalCapital() async {
     final rows = await select(capitalBatches).get();
     return rows.fold<double>(

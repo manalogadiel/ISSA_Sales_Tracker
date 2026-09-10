@@ -321,6 +321,8 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
         for (final p in products) p.name.toLowerCase(): p.id,
       };
 
+      double totalAddedCapital = 0.0;
+
       for (final item in confirmed) {
         final cleanName = item.productName.trim();
         if (cleanName.isEmpty) continue;
@@ -341,6 +343,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
         }
 
         final qty = item.quantity > 0 ? item.quantity : 1.0;
+        totalAddedCapital += qty * item.costPrice;
         await invDao.insertBatch(
           CapitalBatchesCompanion.insert(
             productId: productId,
@@ -352,11 +355,16 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
         );
       }
 
+      ref.read(dashboardSettingsProvider.notifier).onStockAdded(totalAddedCapital);
+      ref.invalidate(inventorySummariesProvider);
+      ref.invalidate(allProductsProvider);
+      ref.invalidate(totalCapitalProvider);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '${confirmed.length} item(s) added to inventory.'),
+                '${confirmed.length} item(s) added to inventory (+${formatPeso(totalAddedCapital)} capital).'),
             backgroundColor: AppColors.success,
           ),
         );

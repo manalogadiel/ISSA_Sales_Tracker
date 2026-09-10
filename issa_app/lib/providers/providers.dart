@@ -43,10 +43,8 @@ final saleStatsProvider = StreamProvider<SaleStats>((ref) {
 
 // ── Total capital (derived from inventory) ─────────────────────────────────
 
-final totalCapitalProvider = FutureProvider<double>((ref) async {
-  // Re-derive whenever inventory changes
-  ref.watch(inventorySummariesProvider);
-  return ref.read(inventoryDaoProvider).totalCapital();
+final totalCapitalProvider = StreamProvider<double>((ref) {
+  return ref.watch(inventoryDaoProvider).watchTotalCapital();
 });
 
 // ── Dashboard settings ─────────────────────────────────────────────────────
@@ -196,6 +194,27 @@ class DashboardSettingsNotifier extends StateNotifier<DashboardSettings> {
       clearSoldTitle: true,
       clearProfitTitle: true,
     );
+  }
+
+  /// Called when stock is restocked or added (via scan or manual entry).
+  /// If manualCapital is active, increments it by the added capital cost.
+  void onStockAdded(double amount) {
+    if (state.manualCapital != null) {
+      state = state.copyWith(
+        manualCapital: (state.manualCapital ?? 0.0) + amount,
+      );
+    }
+  }
+
+  /// Called when stock or batch is removed/deleted.
+  /// If manualCapital is active, decrements it by the removed value.
+  void onStockRemoved(double amount) {
+    if (state.manualCapital != null) {
+      final current = state.manualCapital ?? 0.0;
+      state = state.copyWith(
+        manualCapital: (current - amount).clamp(0.0, double.infinity),
+      );
+    }
   }
 
   void resetToDefaults() {

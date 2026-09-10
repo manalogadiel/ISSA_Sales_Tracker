@@ -439,5 +439,54 @@ void main() {
     expect(notifier.state.manualCapital, isNull);
     expect(notifier.state.manualSold, isNull);
     expect(notifier.state.manualProfit, isNull);
+
+    // Test onStockAdded and onStockRemoved when manual capital is set
+    notifier.setManualCapital(100.0);
+    notifier.onStockAdded(250.0);
+    expect(notifier.state.manualCapital, 350.0);
+    notifier.onStockRemoved(50.0);
+    expect(notifier.state.manualCapital, 300.0);
+  });
+
+  test('watchTotalCapital reactively updates when batches are added and deleted', () async {
+    final invDao = db.inventoryDao;
+    final pId = await invDao.insertProduct(
+      const ProductsCompanion(name: Value('Longganisa Hub')),
+    );
+
+    // Initial total capital should be 0.0
+    expect(await invDao.watchTotalCapital().first, 0.0);
+
+    // Add first restock batch: 5kg @ ₱200/kg = ₱1000
+    final b1 = await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: pId,
+        quantityAdded: 5.0,
+        remainingQuantity: 5.0,
+        costPrice: 200.0,
+        source: BatchSource.manual,
+      ),
+    );
+    expect(await invDao.watchTotalCapital().first, 1000.0);
+
+    // Add second restock batch via capture/scan: 3kg @ ₱150/kg = ₱450 -> Total = ₱1450
+    final b2 = await invDao.insertBatch(
+      CapitalBatchesCompanion.insert(
+        productId: pId,
+        quantityAdded: 3.0,
+        remainingQuantity: 3.0,
+        costPrice: 150.0,
+        source: BatchSource.scannedReceipt,
+      ),
+    );
+    expect(await invDao.watchTotalCapital().first, 1450.0);
+
+    // Delete b1 -> remaining capital should be ₱450
+    await invDao.deleteBatch(b1);
+    expect(await invDao.watchTotalCapital().first, 450.0);
+
+    // Delete b2 -> remaining capital should be ₱0.0
+    await invDao.deleteBatch(b2);
+    expect(await invDao.watchTotalCapital().first, 0.0);
   });
 }

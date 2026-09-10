@@ -186,6 +186,7 @@ class InventoryScreen extends ConsumerWidget {
                   ),
                 );
 
+                ref.read(dashboardSettingsProvider.notifier).onStockAdded(qty * costPrice);
                 ref.invalidate(inventorySummariesProvider);
                 ref.invalidate(allProductsProvider);
                 ref.invalidate(totalCapitalProvider);
@@ -430,15 +431,19 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               if (!formKey.currentState!.validate()) return;
               final dao = ref.read(inventoryDaoProvider);
               final qty = double.parse(qtyCtrl.text);
+              final price = double.parse(priceCtrl.text);
               await dao.insertBatch(
                 CapitalBatchesCompanion.insert(
                   productId: productId,
                   quantityAdded: qty,
                   remainingQuantity: qty,
-                  costPrice: double.parse(priceCtrl.text),
+                  costPrice: price,
                   source: BatchSource.manual,
                 ),
               );
+              ref.read(dashboardSettingsProvider.notifier).onStockAdded(qty * price);
+              ref.invalidate(inventorySummariesProvider);
+              ref.invalidate(totalCapitalProvider);
               if (ctx.mounted) Navigator.pop(ctx);
             },
             style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
@@ -618,11 +623,17 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
+              final productVal = s.batches.fold<double>(
+                  0.0, (acc, b) => acc + b.remainingQuantity * b.costPrice);
               if (salesCount > 0) {
                 await dao.deleteProductCascade(s.product.id);
               } else {
                 await dao.deleteProduct(s.product.id);
               }
+              ref.read(dashboardSettingsProvider.notifier).onStockRemoved(productVal);
+              ref.invalidate(inventorySummariesProvider);
+              ref.invalidate(allProductsProvider);
+              ref.invalidate(totalCapitalProvider);
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -804,11 +815,24 @@ class _BatchTile extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
+              final newQty = double.parse(qtyCtrl.text);
+              final newPrice = double.parse(priceCtrl.text);
+              final oldCapital = batch.remainingQuantity * batch.costPrice;
+              final newCapital = newQty * newPrice;
+              final diff = newCapital - oldCapital;
+
               await ref.read(inventoryDaoProvider).patchBatch(
                     batchId: batch.id,
-                    remainingQuantity: double.parse(qtyCtrl.text),
-                    costPrice: double.parse(priceCtrl.text),
+                    remainingQuantity: newQty,
+                    costPrice: newPrice,
                   );
+              if (diff > 0) {
+                ref.read(dashboardSettingsProvider.notifier).onStockAdded(diff);
+              } else if (diff < 0) {
+                ref.read(dashboardSettingsProvider.notifier).onStockRemoved(-diff);
+              }
+              ref.invalidate(inventorySummariesProvider);
+              ref.invalidate(totalCapitalProvider);
               if (ctx.mounted) Navigator.pop(ctx);
             },
             style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
@@ -876,11 +900,15 @@ class _BatchTile extends ConsumerWidget {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
+              final batchVal = batch.remainingQuantity * batch.costPrice;
               if (allocCount > 0) {
                 await dao.deleteBatchCascade(batch.id);
               } else {
                 await dao.deleteBatch(batch.id);
               }
+              ref.read(dashboardSettingsProvider.notifier).onStockRemoved(batchVal);
+              ref.invalidate(inventorySummariesProvider);
+              ref.invalidate(totalCapitalProvider);
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(

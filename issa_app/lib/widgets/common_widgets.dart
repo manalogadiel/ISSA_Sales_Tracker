@@ -57,27 +57,6 @@ class StatTile extends StatelessWidget {
                   ),
                 ),
               ),
-              if (isManual) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(45),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                        color: Colors.white.withAlpha(80), width: 0.8),
-                  ),
-                  child: const Text(
-                    'MANUAL',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
           const SizedBox(height: 10),

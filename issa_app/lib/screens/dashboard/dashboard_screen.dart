@@ -1292,7 +1292,6 @@ class _OverviewTab extends ConsumerWidget {
                     value: formatPeso(settings.manualCapital!),
                     gradient: AppColors.capitalGradient,
                     icon: Icons.account_balance_wallet_rounded,
-                    subtitle: 'Manual override',
                     isManual: true,
                   );
                 }
@@ -1331,7 +1330,6 @@ class _OverviewTab extends ConsumerWidget {
                             value: formatPeso(settings.manualSold!),
                             gradient: AppColors.soldGradient,
                             icon: Icons.shopping_bag_rounded,
-                            subtitle: 'Manual override',
                             isManual: true,
                           )
                         else
@@ -1347,7 +1345,6 @@ class _OverviewTab extends ConsumerWidget {
                                 ? AppColors.profitGradient
                                 : [AppColors.error, const Color(0xFFB23636)],
                             icon: Icons.trending_up_rounded,
-                            subtitle: 'Manual override',
                             isManual: true,
                           )
                         else
