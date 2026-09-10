@@ -803,13 +803,17 @@ class DashboardScreen extends ConsumerWidget {
                       ref
                           .read(dashboardSettingsProvider.notifier)
                           .resetMetricsToZero();
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('All dashboard cards set to ₱0.00'),
-                          backgroundColor: AppColors.success,
-                        ),
-                      );
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('All dashboard cards set to ₱0.00'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      }
                     }
                   },
                 ),
@@ -965,14 +969,18 @@ class DashboardScreen extends ConsumerWidget {
                           .read(dashboardSettingsProvider.notifier)
                           .resetToDefaults();
                       ref.invalidate(dailyProfitsProvider);
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Dashboard layout and metrics restored to auto defaults'),
-                          backgroundColor: AppColors.success,
-                        ),
-                      );
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Dashboard layout and metrics restored to auto defaults'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      }
                     }
                   },
                 ),
