@@ -29,11 +29,14 @@ class DashboardScreen extends ConsumerWidget {
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert_rounded),
               tooltip: 'Dashboard options',
-              onSelected: (val) {
+              onSelected: (val) async {
                 if (val == 'edit') {
                   _showEditDashboardDialog(context, ref);
                 } else if (val == 'reset') {
-                  _showResetDashboardDialog(context, ref);
+                  final proceed = await _showResetWarningDialog(context);
+                  if (proceed == true && context.mounted) {
+                    _showResetDashboardDialog(context, ref);
+                  }
                 }
               },
               itemBuilder: (ctx) => [

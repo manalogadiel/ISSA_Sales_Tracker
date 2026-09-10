@@ -10,8 +10,6 @@ class StatTile extends StatelessWidget {
     required this.gradient,
     this.icon,
     this.subtitle,
-    this.onTap,
-    this.onEdit,
     this.isManual = false,
   });
 
@@ -20,14 +18,10 @@ class StatTile extends StatelessWidget {
   final List<Color> gradient;
   final IconData? icon;
   final String? subtitle;
-  final VoidCallback? onTap;
-  final VoidCallback? onEdit;
   final bool isManual;
 
   @override
   Widget build(BuildContext context) {
-    final hasAction = onTap != null || onEdit != null;
-
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -44,97 +38,68 @@ class StatTile extends StatelessWidget {
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: onTap ?? onEdit,
-          borderRadius: BorderRadius.circular(20),
-          splashColor: Colors.white.withAlpha(40),
-          highlightColor: Colors.white.withAlpha(20),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (icon != null) ...[
-                      Icon(icon, color: Colors.white.withAlpha(204), size: 20),
-                      const SizedBox(width: 6),
-                    ],
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (isManual) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(45),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                              color: Colors.white.withAlpha(80), width: 0.8),
-                        ),
-                        child: const Text(
-                          'MANUAL',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (hasAction)
-                      GestureDetector(
-                        onTap: onEdit ?? onTap,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(35),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.edit_rounded,
-                            color: Colors.white,
-                            size: 15,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    height: 1.1,
-                  ),
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.white.withAlpha(179),
-                    ),
-                  ),
-                ],
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: Colors.white.withAlpha(204), size: 20),
+                const SizedBox(width: 6),
               ],
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (isManual) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(45),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: Colors.white.withAlpha(80), width: 0.8),
+                  ),
+                  child: const Text(
+                    'MANUAL',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              height: 1.1,
             ),
           ),
-        ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.white.withAlpha(179),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
