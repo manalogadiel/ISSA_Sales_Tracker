@@ -15,6 +15,7 @@
             android:value="ocr" />
         <activity
             android:name=".MainActivity"
+            android:label="Issa"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
