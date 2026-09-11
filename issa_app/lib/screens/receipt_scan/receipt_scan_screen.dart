@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../providers/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import 'receipt_ocr_parser.dart';
 
 /// A candidate line item parsed from OCR output.
 class _OcrLineItem {
@@ -71,6 +72,9 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
               items: _lineItems,
               onItemChanged: (i, item) =>
                   setState(() => _lineItems[i] = item),
+              onItemDeleted: (i) =>
+                  setState(() => _lineItems.removeAt(i)),
+              onAddItem: _showManualAddItemDialog,
               onCommit: _commitConfirmed,
               isCommitting: _isCommitting,
             )
@@ -106,7 +110,20 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
     try {
       final inputImage = InputImage.fromFile(file);
       final recognized = await _textRecognizer.processImage(inputImage);
-      final items = _parseOcrText(recognized.text);
+      final existingProducts =
+          ref.read(allProductsProvider).valueOrNull?.map((p) => p.name).toList();
+      final parser = ReceiptOcrParser(customProducts: existingProducts);
+      final parsedItems = parser.parseRecognizedText(recognized);
+      final items = parsedItems
+          .map((p) => _OcrLineItem(
+                rawText: p.rawText,
+                productName: p.productName,
+                quantity: p.quantity,
+                costPrice: p.costPrice,
+                confirmed: true,
+              ))
+          .toList();
+
       setState(() {
         _lineItems = items;
         _isScanning = false;
@@ -121,183 +138,6 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
       }
     }
   }
-
-  /// Parse OCR text into candidate line items.
-  /// Supports:
-  /// - 2-line format: Product name line followed by "[Qty] x [Unit Cost]" line
-  /// - Inline format: "Product Name [Qty] x [Unit Cost]"
-  /// - Trailing Qty + Price: "Product Name [Qty] [Unit Cost]"
-  /// - Trailing Price: "Product Name [Price]" (Qty defaults to 1)
-  /// Automatically filters out headers, metadata, totals, cash/payment, and tax lines.
-  List<_OcrLineItem> _parseOcrText(String text) {
-    final rawLines = text
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
-
-    // Filter out obvious metadata, headers, totals, and dividers
-    final lines = rawLines.where((l) => !_isIgnoreLine(l)).toList();
-
-    final items = <_OcrLineItem>[];
-    int i = 0;
-
-    final qtyPriceRegex = RegExp(
-      r'^\s*(\d+(?:\.\d+)?)\s*(?:kg|kilos|kilo|pcs|pc|packs|pack)?\s*[xX@*]\s*(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)',
-      caseSensitive: false,
-    );
-
-    final inlineQtyPriceRegex = RegExp(
-      r'^(.*?)\s+(\d+(?:\.\d+)?)\s*(?:kg|kilos|kilo|pcs|pc|packs|pack)?\s*[xX@*]\s*(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)',
-      caseSensitive: false,
-    );
-
-    final trailingQtyPriceRegex = RegExp(
-      r'^(.*?)\s+(\d+(?:\.\d+)?)\s*(?:kg|kilos|kilo|pcs|pc)?\s+(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*$',
-      caseSensitive: false,
-    );
-
-    final trailingPriceRegex = RegExp(
-      r'^(.*?)\s+(?:[₱Pp]?(?:HP)?\.?\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*$',
-      caseSensitive: false,
-    );
-
-    while (i < lines.length) {
-      final cur = lines[i];
-
-      // Case A: 2-line pattern (Line i is Name; Line i+1 is "Qty x UnitPrice")
-      if (i + 1 < lines.length) {
-        final next = lines[i + 1];
-        final m = qtyPriceRegex.firstMatch(next);
-        if (m != null) {
-          final q = double.tryParse(m.group(1)!) ?? 1.0;
-          final p = _parsePrice(m.group(2)!) ?? 0.0;
-          final name = _cleanProductName(cur);
-          if (name.isNotEmpty && name.length >= 2) {
-            items.add(_OcrLineItem(
-              rawText: '$cur\n$next',
-              productName: name,
-              quantity: q,
-              costPrice: p,
-              confirmed: true,
-            ));
-            i += 2;
-            continue;
-          }
-        }
-      }
-
-      // Case B: Inline Qty x Price ("Pork Tapa 5.000 x 310.00")
-      final inlineM = inlineQtyPriceRegex.firstMatch(cur);
-      if (inlineM != null) {
-        final name = _cleanProductName(inlineM.group(1)!);
-        final q = double.tryParse(inlineM.group(2)!) ?? 1.0;
-        final p = _parsePrice(inlineM.group(3)!) ?? 0.0;
-        if (name.isNotEmpty && name.length >= 2) {
-          items.add(_OcrLineItem(
-            rawText: cur,
-            productName: name,
-            quantity: q,
-            costPrice: p,
-            confirmed: true,
-          ));
-          i++;
-          continue;
-        }
-      }
-
-      // Case C: Trailing Qty + Price ("Pork Tapa 5.0 310.00")
-      final trailingM = trailingQtyPriceRegex.firstMatch(cur);
-      if (trailingM != null) {
-        final name = _cleanProductName(trailingM.group(1)!);
-        final q = double.tryParse(trailingM.group(2)!) ?? 1.0;
-        final p = _parsePrice(trailingM.group(3)!) ?? 0.0;
-        if (name.isNotEmpty && name.length >= 2) {
-          items.add(_OcrLineItem(
-            rawText: cur,
-            productName: name,
-            quantity: q,
-            costPrice: p,
-            confirmed: true,
-          ));
-          i++;
-          continue;
-        }
-      }
-
-      // Case D: Trailing Price only (defaults Qty to 1.0 kg)
-      final priceM = trailingPriceRegex.firstMatch(cur);
-      if (priceM != null) {
-        final name = _cleanProductName(priceM.group(1)!);
-        final p = _parsePrice(priceM.group(2)!) ?? 0.0;
-        if (name.isNotEmpty && name.length >= 2 && p > 0) {
-          items.add(_OcrLineItem(
-            rawText: cur,
-            productName: name,
-            quantity: 1.0,
-            costPrice: p,
-            confirmed: true,
-          ));
-          i++;
-          continue;
-        }
-      }
-
-      i++;
-    }
-
-    return items;
-  }
-
-  bool _isIgnoreLine(String line) {
-    final lower = line.toLowerCase().trim();
-    if (lower.isEmpty) return true;
-    if (RegExp(r'^[-=_.*#~]{3,}$').hasMatch(lower)) return true;
-    if (RegExp(r'^\(?\d+\)?$').hasMatch(lower)) return true; // e.g. (7)
-    if (RegExp(r'^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}').hasMatch(lower)) return true;
-    if (RegExp(r'^\d{1,2}:\d{2}').hasMatch(lower)) return true;
-    if (RegExp(r'^(?:#|or#|si#|inv#|trans#|ref#)\s*[\w-]+').hasMatch(lower)) return true;
-
-    const ignoreKeywords = [
-      'total', 'subtotal', 'sub-total', 'grand total', 'net total', 'amount due',
-      'cash', 'change', 'tendered', 'payment', 'card', 'gcash', 'maya',
-      'employee', 'pos:', 'pos 1', 'pos 2', 'cashier', 'terminal',
-      'meat processing', 'store', 'branch', 'official receipt', 'sales invoice',
-      'vat', 'tax', 'vatable', 'zero rated', 'exempt', 'tin:',
-    ];
-
-    for (final kw in ignoreKeywords) {
-      if (lower.contains(kw)) return true;
-    }
-    return false;
-  }
-
-  double? _parsePrice(String s) {
-    final cleaned = s
-        .replaceAll(RegExp(r'[₱PpPp\s,]'), '')
-        .replaceAll(RegExp(r'PHP', caseSensitive: false), '');
-    return double.tryParse(cleaned);
-  }
-
-  String _cleanProductName(String line) {
-    // Strip trailing line total price if attached, e.g. "₱1,175.00" or "1,175.00"
-    var name = line.replaceFirst(
-      RegExp(r'\s+(?:[₱Pp]?(?:HP)?\.?\s*)?\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*$',
-          caseSensitive: false),
-      '',
-    );
-    name = name
-        .replaceAll(RegExp(r"[^\w\s'-]"), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    return _toTitleCase(name);
-  }
-
-  String _toTitleCase(String s) => s
-      .split(' ')
-      .where((w) => w.isNotEmpty)
-      .map((w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
-      .join(' ');
 
   /// Commit only the confirmed, non-excluded items.
   Future<void> _commitConfirmed() async {
@@ -379,6 +219,153 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
     } finally {
       if (mounted) setState(() => _isCommitting = false);
     }
+  }
+
+  void _showManualAddItemDialog() {
+    final summaries = ref.read(inventorySummariesProvider).valueOrNull ?? [];
+    final dbProducts =
+        ref.read(allProductsProvider).valueOrNull?.map((p) => p.name).toList() ??
+            [];
+
+    // All available product names: core 9 + DB products
+    final allNames = <String>[...ReceiptOcrParser.kDefaultCatalogProducts];
+    for (final p in dbProducts) {
+      if (!allNames.any((e) => e.toLowerCase() == p.toLowerCase())) {
+        allNames.add(p);
+      }
+    }
+
+    String selectedProduct = allNames.first;
+    final qtyCtrl = TextEditingController(text: '1');
+    final priceCtrl = TextEditingController();
+
+    void updatePriceFor(String prodName) {
+      final s = summaries
+          .where((item) =>
+              item.product.name.toLowerCase() == prodName.toLowerCase())
+          .firstOrNull;
+      if (s != null && s.latestCostPrice > 0) {
+        priceCtrl.text =
+            s.latestCostPrice.truncateToDouble() == s.latestCostPrice
+                ? s.latestCostPrice.toInt().toString()
+                : s.latestCostPrice.toStringAsFixed(2);
+      } else {
+        priceCtrl.clear();
+      }
+    }
+
+    updatePriceFor(selectedProduct);
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: const [
+              Icon(Icons.add_shopping_cart_rounded, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Add Item to Scan'),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select Product:',
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    initialValue: allNames.contains(selectedProduct)
+                        ? selectedProduct
+                        : (allNames.isNotEmpty ? allNames.first : null),
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.inventory_2_outlined),
+                      isDense: true,
+                    ),
+                    items: allNames.map((name) {
+                      return DropdownMenuItem<String>(
+                        value: name,
+                        child: Text(name,
+                            style: const TextStyle(
+                                fontFamily: 'Nunito', fontSize: 14)),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() {
+                          selectedProduct = val;
+                          updatePriceFor(val);
+                        });
+                      }
+                    },
+                  ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: qtyCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity (kg)',
+                    suffixText: 'kg',
+                    prefixIcon: Icon(Icons.scale_outlined),
+                    isDense: true,
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: priceCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Cost price per kg (₱)',
+                    prefixText: '₱ ',
+                    prefixIcon: Icon(Icons.price_change_outlined),
+                    isDense: true,
+                    helperText:
+                        'Autofilled from inventory if available (editable)',
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final q = double.tryParse(qtyCtrl.text) ?? 1.0;
+                final p = double.tryParse(priceCtrl.text) ?? 0.0;
+                setState(() {
+                  _lineItems.add(_OcrLineItem(
+                    rawText: 'Manually Added',
+                    productName: selectedProduct,
+                    quantity: q > 0 ? q : 1.0,
+                    costPrice: p >= 0 ? p : 0.0,
+                    confirmed: true,
+                  ));
+                });
+                Navigator.pop(ctx);
+              },
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+              child: const Text('Add to Scanned List'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -495,12 +482,16 @@ class _ReviewBody extends StatelessWidget {
   const _ReviewBody({
     required this.items,
     required this.onItemChanged,
+    required this.onItemDeleted,
+    required this.onAddItem,
     required this.onCommit,
     required this.isCommitting,
   });
 
   final List<_OcrLineItem> items;
   final void Function(int, _OcrLineItem) onItemChanged;
+  final void Function(int) onItemDeleted;
+  final VoidCallback onAddItem;
   final VoidCallback onCommit;
   final bool isCommitting;
 
@@ -539,15 +530,75 @@ class _ReviewBody extends StatelessWidget {
           ),
         ),
 
-        const SizedBox(height: 8),
+        // Items counter & manual Add Item button
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${items.length} item(s) in review',
+                style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: onAddItem,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Item'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 36),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 4),
 
         // Item list
         Expanded(
           child: items.isEmpty
-              ? const EmptyState(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'No text detected',
-                  subtitle: 'Try scanning a clearer photo of the receipt.',
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.receipt_long_outlined,
+                          size: 48, color: AppColors.textHint),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'No matching inventory items found',
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Tap "Add Item" above to add items manually.',
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: onAddItem,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Add Item Manually'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                        ),
+                      ),
+                    ],
+                  ),
                 )
               : ListView.separated(
                   padding:
@@ -557,6 +608,7 @@ class _ReviewBody extends StatelessWidget {
                   itemBuilder: (_, i) => _ReviewItemCard(
                     item: items[i],
                     onChanged: (updated) => onItemChanged(i, updated),
+                    onDelete: () => onItemDeleted(i),
                   ),
                 ),
         ),
@@ -599,9 +651,15 @@ class _ReviewBody extends StatelessWidget {
 }
 
 class _ReviewItemCard extends StatefulWidget {
-  const _ReviewItemCard({required this.item, required this.onChanged});
+  const _ReviewItemCard({
+    required this.item,
+    required this.onChanged,
+    this.onDelete,
+  });
+
   final _OcrLineItem item;
   final ValueChanged<_OcrLineItem> onChanged;
+  final VoidCallback? onDelete;
 
   @override
   State<_ReviewItemCard> createState() => _ReviewItemCardState();
@@ -733,35 +791,60 @@ class _ReviewItemCardState extends State<_ReviewItemCard> {
             // Confirm / Exclude row
             Row(
               children: [
-                Expanded(
-                  child: CheckboxListTile(
-                    value: item.confirmed,
-                    onChanged: (v) {
-                      widget.onChanged(_OcrLineItem(
-                        rawText: item.rawText,
-                        productName: _nameCtrl.text,
-                        quantity: double.tryParse(_qtyCtrl.text) ?? 1,
-                        costPrice:
-                            double.tryParse(_priceCtrl.text) ?? 0,
-                      )
-                        ..confirmed = v ?? false
-                        ..excluded = item.excluded);
-                    },
-                    title: const Text(
-                      'Confirm',
-                      style: TextStyle(
-                        fontFamily: 'Nunito',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.success,
-                      ),
+                InkWell(
+                  onTap: () {
+                    widget.onChanged(_OcrLineItem(
+                      rawText: item.rawText,
+                      productName: _nameCtrl.text,
+                      quantity: double.tryParse(_qtyCtrl.text) ?? 1,
+                      costPrice: double.tryParse(_priceCtrl.text) ?? 0,
+                    )
+                      ..confirmed = !item.confirmed
+                      ..excluded = item.excluded);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: item.confirmed,
+                            activeColor: AppColors.success,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            onChanged: (v) {
+                              widget.onChanged(_OcrLineItem(
+                                rawText: item.rawText,
+                                productName: _nameCtrl.text,
+                                quantity: double.tryParse(_qtyCtrl.text) ?? 1,
+                                costPrice:
+                                    double.tryParse(_priceCtrl.text) ?? 0,
+                              )
+                                ..confirmed = v ?? false
+                                ..excluded = item.excluded);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Confirm',
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ],
                     ),
-                    activeColor: AppColors.success,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
                   ),
                 ),
+                const Spacer(),
                 TextButton.icon(
                   onPressed: () {
                     widget.onChanged(_OcrLineItem(
@@ -774,17 +857,29 @@ class _ReviewItemCardState extends State<_ReviewItemCard> {
                       ..excluded = !item.excluded);
                   },
                   icon: Icon(
-                    item.excluded ? Icons.undo_rounded : Icons.delete_outline_rounded,
+                    item.excluded ? Icons.undo_rounded : Icons.block_rounded,
                     size: 16,
                   ),
                   label: Text(item.excluded ? 'Undo' : 'Exclude'),
                   style: TextButton.styleFrom(
-                    foregroundColor:
-                        item.excluded ? AppColors.primaryDeep : AppColors.error,
+                    foregroundColor: item.excluded
+                        ? AppColors.primaryDeep
+                        : AppColors.textSecondary,
+                    visualDensity: VisualDensity.compact,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   ),
                 ),
+                if (widget.onDelete != null) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 20, color: AppColors.error),
+                    tooltip: 'Remove from list',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: widget.onDelete,
+                  ),
+                ],
               ],
             ),
           ],

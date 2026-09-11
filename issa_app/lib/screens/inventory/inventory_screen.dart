@@ -196,6 +196,24 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     final sellingPriceCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
+    final summaries = ref.read(inventorySummariesProvider).valueOrNull ?? [];
+    nameCtrl.addListener(() {
+      final input = nameCtrl.text.trim().toLowerCase();
+      final match = summaries.where((s) => s.product.name.trim().toLowerCase() == input).firstOrNull;
+      if (match != null) {
+        if (costPriceCtrl.text.isEmpty && match.latestCostPrice > 0) {
+          costPriceCtrl.text = match.latestCostPrice.truncateToDouble() == match.latestCostPrice
+              ? match.latestCostPrice.toInt().toString()
+              : match.latestCostPrice.toStringAsFixed(2);
+        }
+        if (sellingPriceCtrl.text.isEmpty && match.product.effectiveSellingPrice > 0) {
+          sellingPriceCtrl.text = match.product.effectiveSellingPrice.truncateToDouble() == match.product.effectiveSellingPrice
+              ? match.product.effectiveSellingPrice.toInt().toString()
+              : match.product.effectiveSellingPrice.toStringAsFixed(2);
+        }
+      }
+    });
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -224,12 +242,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                     labelText: 'Quantity (kg)',
                     suffixText: 'kg',
                     prefixIcon: Icon(Icons.scale_outlined),
+                    helperText: 'Enter 0 to add product without initial stock',
                   ),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   validator: (v) {
                     final n = double.tryParse(v ?? '');
-                    if (n == null || n <= 0) return 'Enter valid quantity';
+                    if (n == null || n < 0) return 'Enter valid quantity';
                     return null;
                   },
                 ),
@@ -310,19 +329,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 final qty = cleanParseNumber(qtyCtrl.text) ?? 1.0;
                 final costPrice = cleanParseNumber(costPriceCtrl.text) ?? 0.0;
 
-                await dao.insertBatch(
-                  CapitalBatchesCompanion.insert(
-                    productId: productId,
-                    quantityAdded: qty,
-                    remainingQuantity: qty,
-                    costPrice: costPrice,
-                    source: BatchSource.manual,
-                  ),
-                );
+                if (qty > 0) {
+                  await dao.insertBatch(
+                    CapitalBatchesCompanion.insert(
+                      productId: productId,
+                      quantityAdded: qty,
+                      remainingQuantity: qty,
+                      costPrice: costPrice,
+                      source: BatchSource.manual,
+                    ),
+                  );
 
-                ref
-                    .read(dashboardSettingsProvider.notifier)
-                    .onStockAdded(qty * costPrice);
+                  ref
+                      .read(dashboardSettingsProvider.notifier)
+                      .onStockAdded(qty * costPrice);
+                }
                 ref.invalidate(inventorySummariesProvider);
                 ref.invalidate(allProductsProvider);
                 ref.invalidate(totalCapitalProvider);
@@ -685,7 +706,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                       const SizedBox(width: 4),
                       TextButton.icon(
                         onPressed: () =>
-                            _showAddBatchDialog(context, s.product.id),
+                            _showAddBatchDialog(context, s.product.id, s.latestCostPrice),
                         icon: const Icon(Icons.add_box_outlined, size: 16),
                         label: const Text('Add Restock',
                             style: TextStyle(fontSize: 12)),
@@ -732,7 +753,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: OutlinedButton.icon(
-                onPressed: () => _showAddBatchDialog(context, s.product.id),
+                onPressed: () =>
+                    _showAddBatchDialog(context, s.product.id, s.latestCostPrice),
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Add Restock Batch'),
                 style: OutlinedButton.styleFrom(
@@ -746,52 +768,63 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
     );
   }
 
-  Future<void> _showAddBatchDialog(BuildContext context, int productId) async {
+  Future<void> _showAddBatchDialog(BuildContext context, int productId,
+      [double? defaultCostPrice]) async {
     final qtyCtrl = TextEditingController(text: '1');
-    final priceCtrl = TextEditingController();
+    final initialPrice = (defaultCostPrice != null && defaultCostPrice > 0)
+        ? (defaultCostPrice.truncateToDouble() == defaultCostPrice
+            ? defaultCostPrice.toInt().toString()
+            : defaultCostPrice.toStringAsFixed(2))
+        : '';
+    final priceCtrl = TextEditingController(text: initialPrice);
     final formKey = GlobalKey<FormState>();
 
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Add Restock Batch'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: qtyCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity added (kg)',
-                  suffixText: 'kg',
-                  prefixIcon: Icon(Icons.scale_outlined),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n <= 0) return 'Enter valid quantity';
-                  return null;
-                },
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: qtyCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Quantity added (kg)',
+                      suffixText: 'kg',
+                      prefixIcon: Icon(Icons.scale_outlined),
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      if (n == null || n <= 0) return 'Enter valid quantity';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: priceCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Cost price per kg (₱)',
+                      prefixText: '₱ ',
+                      prefixIcon: Icon(Icons.price_change_outlined),
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      if (n == null || n < 0) return 'Enter valid price';
+                      return null;
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: priceCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Cost price per kg (₱)',
-                  prefixText: '₱ ',
-                  prefixIcon: Icon(Icons.price_change_outlined),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Enter valid price';
-                  return null;
-                },
-              ),
-            ],
+            ),
           ),
         ),
         actions: [
@@ -1231,7 +1264,7 @@ class _ProductGridCard extends ConsumerWidget {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => _showAddBatchDialog(
-                                context, ref, s.product.id),
+                                context, ref, s.product.id, s.latestCostPrice),
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
@@ -1343,7 +1376,7 @@ class _ProductGridCard extends ConsumerWidget {
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(
                   child: Text('No batches found for this product.',
-                      style: TextStyle(color: AppColors.textHint)),
+                       style: TextStyle(color: AppColors.textHint)),
                 ),
               )
             else
@@ -1358,7 +1391,7 @@ class _ProductGridCard extends ConsumerWidget {
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
-                _showAddBatchDialog(context, ref, s.product.id);
+                _showAddBatchDialog(context, ref, s.product.id, s.latestCostPrice);
               },
               icon: const Icon(Icons.add_rounded),
               label: const Text('Add Restock Batch'),
@@ -1370,52 +1403,63 @@ class _ProductGridCard extends ConsumerWidget {
   }
 
   Future<void> _showAddBatchDialog(
-      BuildContext context, WidgetRef ref, int productId) async {
+      BuildContext context, WidgetRef ref, int productId,
+      [double? defaultCostPrice]) async {
     final qtyCtrl = TextEditingController(text: '1');
-    final priceCtrl = TextEditingController();
+    final initialPrice = (defaultCostPrice != null && defaultCostPrice > 0)
+        ? (defaultCostPrice.truncateToDouble() == defaultCostPrice
+            ? defaultCostPrice.toInt().toString()
+            : defaultCostPrice.toStringAsFixed(2))
+        : '';
+    final priceCtrl = TextEditingController(text: initialPrice);
     final formKey = GlobalKey<FormState>();
 
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Add Restock Batch'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: qtyCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity added (kg)',
-                  suffixText: 'kg',
-                  prefixIcon: Icon(Icons.scale_outlined),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n <= 0) return 'Enter valid quantity';
-                  return null;
-                },
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: qtyCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Quantity added (kg)',
+                      suffixText: 'kg',
+                      prefixIcon: Icon(Icons.scale_outlined),
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      if (n == null || n <= 0) return 'Enter valid quantity';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: priceCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Cost price per kg (₱)',
+                      prefixText: '₱ ',
+                      prefixIcon: Icon(Icons.price_change_outlined),
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      if (n == null || n < 0) return 'Enter valid price';
+                      return null;
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: priceCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Cost price per kg (₱)',
-                  prefixText: '₱ ',
-                  prefixIcon: Icon(Icons.price_change_outlined),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < 0) return 'Enter valid price';
-                  return null;
-                },
-              ),
-            ],
+            ),
           ),
         ),
         actions: [

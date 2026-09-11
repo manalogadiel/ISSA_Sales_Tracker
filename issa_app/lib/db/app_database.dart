@@ -437,8 +437,12 @@ LazyDatabase _openConnection() {
   daos: [InventoryDao, SalesDao],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
-  AppDatabase.forTesting(super.connection);
+  AppDatabase()
+      : isTesting = false,
+        super(_openConnection());
+  AppDatabase.forTesting(super.connection, {this.isTesting = true});
+
+  final bool isTesting;
 
   @override
   int get schemaVersion => 2;
@@ -469,8 +473,39 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
                 'UPDATE products SET selling_price = 0.0 WHERE selling_price IS NULL;');
           } catch (_) {}
+          if (!isTesting) {
+            await seedCoreProductsIfEmpty();
+          }
         },
       );
+
+  static const List<String> kDefaultCoreProducts = [
+    'Garlic Pork Longganisa',
+    'Sweet Pork Longganisa',
+    'Sweet & Spicy Pork Longganisa',
+    'Chicken Longganisa',
+    'Spicy Chicken Longganisa',
+    'Chicken Hamonado',
+    'Pork Tapa',
+    'Pork Hamonado',
+    'Pork Tocino',
+  ];
+
+  Future<void> seedCoreProductsIfEmpty() async {
+    for (final name in kDefaultCoreProducts) {
+      final existing = await (select(products)
+            ..where((t) => t.name.lower().equals(name.toLowerCase())))
+          .getSingleOrNull();
+      if (existing == null) {
+        await into(products).insert(
+          ProductsCompanion.insert(
+            name: name,
+            sellingPrice: const Value(0.0),
+          ),
+        );
+      }
+    }
+  }
 }
 
 extension ProductSafeSellingPrice on Product {
