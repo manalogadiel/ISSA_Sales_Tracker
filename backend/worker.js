@@ -1,17 +1,10 @@
 /**
  * Cloudflare Worker: Receipt Scanner Proxy for ISSA Sales Tracker
- *
- * Hides your Google Gemini API key from client applications.
- * Accepts receipt image data, forwards it to Gemini 1.5 Flash Vision,
- * and returns structured JSON with extracted inventory items.
- *
- * Cloudflare Environment Variable Required:
- * - GEMINI_API_KEY: Your Google AI Studio API key (stored as a secret)
  */
 
 export default {
   async fetch(request, env, ctx) {
-    // 1. Handle CORS preflight
+    /* 1. Handle CORS preflight */
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -27,16 +20,47 @@ export default {
       "Content-Type": "application/json",
     };
 
-    // Only allow POST
+    /* Check for API key in environment */
+    const apiKey = env.GEMINI_API_KEY;
+
+    /* Allow GET for quick health-check and model discovery */
+    if (request.method === "GET") {
+      const url = new URL(request.url);
+      if (url.pathname.includes("/models") && apiKey) {
+        try {
+          const listRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+          );
+          const listData = await listRes.json();
+          return new Response(JSON.stringify(listData, null, 2), {
+            status: listRes.status,
+            headers: corsHeaders,
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ error: err.message }), {
+            status: 500,
+            headers: corsHeaders,
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          message: "ISSA Sales Tracker Gemini AI Proxy is operational",
+          hasApiKey: !!apiKey,
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    /* Only allow POST for scanning */
     if (request.method !== "POST") {
       return new Response(
         JSON.stringify({ error: "Method not allowed. Send a POST request." }),
         { status: 405, headers: corsHeaders }
       );
     }
-
-    // Check for API key in environment
-    const apiKey = env.GEMINI_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({
@@ -58,7 +82,7 @@ export default {
         );
       }
 
-      // 2. Prepare the Prompt for Gemini 1.5 Flash
+      /* 2. Prepare the Prompt for Gemini Flash Vision */
       const catalogListStr = catalog.length > 0
         ? catalog.map((c) => `- ${c}`).join("\n")
         : [
@@ -89,8 +113,13 @@ EXTRACTION RULES:
 4. If an item on the receipt is NOT in the allowed catalog, do NOT include it.
 5. Return ONLY a valid JSON array of objects with keys: productName, quantity, costPrice.`;
 
-      // 3. Call Gemini 1.5 Flash API
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      /* 3. Call Gemini API (tries active flash vision models) */
+      const candidateModels = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash",
+      ];
 
       const geminiPayload = {
         contents: [
@@ -98,8 +127,8 @@ EXTRACTION RULES:
             parts: [
               { text: promptText },
               {
-                inline_data: {
-                  mime_type: mimeType,
+                inlineData: {
+                  mimeType: mimeType,
                   data: imageBase64,
                 },
               },
@@ -107,25 +136,50 @@ EXTRACTION RULES:
           },
         ],
         generationConfig: {
-          response_mime_type: "application/json",
+          responseMimeType: "application/json",
           temperature: 0.1,
         },
       };
 
-      const geminiResponse = await fetch(geminiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(geminiPayload),
-      });
+      let geminiResponse = null;
+      let modelErrors = [];
 
-      if (!geminiResponse.ok) {
-        const errorText = await geminiResponse.text();
+      for (const model of candidateModels) {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const resp = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(geminiPayload),
+        });
+
+        if (resp.ok) {
+          geminiResponse = resp;
+          break;
+        } else {
+          const errText = await resp.text();
+          modelErrors.push({ model, status: resp.status, error: errText });
+          if (resp.status === 404) {
+            continue;
+          } else if (resp.status === 401 || resp.status === 403) {
+            /* Invalid API key or permission denied */
+            return new Response(
+              JSON.stringify({
+                error: `Gemini Authentication Error (${model}): ${resp.statusText}`,
+                details: errText,
+              }),
+              { status: resp.status, headers: corsHeaders }
+            );
+          }
+        }
+      }
+
+      if (!geminiResponse) {
         return new Response(
           JSON.stringify({
-            error: `Gemini API error: ${geminiResponse.statusText}`,
-            details: errorText,
+            error: "No available Gemini model responded successfully.",
+            details: JSON.stringify(modelErrors, null, 2),
           }),
-          { status: geminiResponse.status, headers: corsHeaders }
+          { status: 502, headers: corsHeaders }
         );
       }
 
@@ -140,12 +194,12 @@ EXTRACTION RULES:
         );
       }
 
-      // Parse JSON from Gemini output
+      /* Parse JSON from Gemini output */
       let parsedItems = [];
       try {
         parsedItems = JSON.parse(rawOutputText);
       } catch (e) {
-        // Fallback cleanup if markdown formatting was included
+        /* Fallback cleanup if markdown formatting was included */
         const cleaned = rawOutputText
           .replace(/```json/g, "")
           .replace(/```/g, "")
