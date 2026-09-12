@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/app_database.dart';
+import '../services/receipt_ai_service.dart';
 
 export '../db/app_database.dart';
 export 'product_appearance.dart';
+export '../services/receipt_ai_service.dart';
 
 /// Singleton database provider.
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -242,5 +244,21 @@ final dailyProfitsProvider =
 final batchesForProductProvider =
     StreamProvider.family<List<CapitalBatch>, int>((ref, productId) {
   return ref.watch(inventoryDaoProvider).watchBatchesForProduct(productId);
+});
+
+// ── AI Scanner Proxy URL Provider ──────────────────────────────────────────
+
+class ReceiptAiProxyUrlNotifier extends StateNotifier<String> {
+  ReceiptAiProxyUrlNotifier() : super(ReceiptAiService.instance.proxyUrl);
+
+  Future<void> setUrl(String url) async {
+    await ReceiptAiService.instance.setProxyUrl(url);
+    state = url.trim();
+  }
+}
+
+final receiptAiProxyUrlProvider =
+    StateNotifierProvider<ReceiptAiProxyUrlNotifier, String>((ref) {
+  return ReceiptAiProxyUrlNotifier();
 });
 

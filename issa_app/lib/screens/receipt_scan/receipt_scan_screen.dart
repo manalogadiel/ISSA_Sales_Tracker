@@ -41,6 +41,8 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
   bool _isCommitting = false;
   List<_OcrLineItem> _lineItems = [];
   bool _showReview = false;
+  String _scanStatusText = 'Scanning receipt…';
+  String _scanEngine = 'Offline ML Kit';
 
   final _picker = ImagePicker();
   final _textRecognizer =
@@ -54,22 +56,33 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasAi = ref.watch(receiptAiProxyUrlProvider).isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Receipt Scan'),
         actions: [
+          IconButton(
+            icon: Icon(
+              hasAi ? Icons.auto_awesome_rounded : Icons.tune_rounded,
+              color: hasAi ? AppColors.primary : AppColors.textSecondary,
+            ),
+            tooltip: hasAi ? 'Gemini AI Active' : 'Configure Gemini AI',
+            onPressed: _showAiSettingsDialog,
+          ),
           if (_showReview)
             TextButton.icon(
               onPressed: _reset,
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('New Scan'),
             ),
-          const SizedBox(width:8),
+          const SizedBox(width: 8),
         ],
       ),
       body: _showReview
           ? _ReviewBody(
               items: _lineItems,
+              scanEngine: _scanEngine,
               onItemChanged: (i, item) =>
                   setState(() => _lineItems[i] = item),
               onItemDeleted: (i) =>
@@ -81,6 +94,9 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
           : _ScanBody(
               imageFile: _imageFile,
               isScanning: _isScanning,
+              scanStatusText: _scanStatusText,
+              hasAiConfigured: hasAi,
+              onConfigureAi: _showAiSettingsDialog,
               onPickCamera: () => _pickImage(ImageSource.camera),
               onPickGallery: () => _pickImage(ImageSource.gallery),
             ),
@@ -93,49 +109,100 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
       _lineItems = [];
       _showReview = false;
       _isScanning = false;
+      _scanStatusText = 'Scanning receipt…';
     });
   }
 
   Future<void> _pickImage(ImageSource source) async {
     final xFile = await _picker.pickImage(
-        source: source, imageQuality: 90, maxWidth: 1600);
+        source: source, imageQuality: 85, maxWidth: 1280, maxHeight: 1280);
     if (xFile == null) return;
 
     final file = File(xFile.path);
     setState(() {
       _imageFile = file;
       _isScanning = true;
+      _scanStatusText = 'Analyzing receipt…';
     });
 
-    try {
-      final inputImage = InputImage.fromFile(file);
-      final recognized = await _textRecognizer.processImage(inputImage);
-      final existingProducts =
-          ref.read(allProductsProvider).valueOrNull?.map((p) => p.name).toList();
-      final parser = ReceiptOcrParser(customProducts: existingProducts);
-      final parsedItems = parser.parseRecognizedText(recognized);
-      final items = parsedItems
-          .map((p) => _OcrLineItem(
-                rawText: p.rawText,
-                productName: p.productName,
-                quantity: p.quantity,
-                costPrice: p.costPrice,
-                confirmed: true,
-              ))
-          .toList();
+    final existingProducts =
+        ref.read(allProductsProvider).valueOrNull?.map((p) => p.name).toList() ??
+            [];
+    final allNames = <String>[...ReceiptOcrParser.kDefaultCatalogProducts];
+    for (final p in existingProducts) {
+      if (!allNames.any((e) => e.toLowerCase() == p.toLowerCase())) {
+        allNames.add(p);
+      }
+    }
 
+    List<_OcrLineItem> items = [];
+    bool usedAi = false;
+
+    // 1. Try Gemini Vision AI via Cloudflare Worker Proxy (if configured)
+    if (ReceiptAiService.instance.hasProxyConfigured) {
+      setState(() => _scanStatusText = 'Analyzing with Gemini 1.5 Flash AI…');
+      try {
+        final aiItems = await ReceiptAiService.instance.scanWithAi(
+          imageFile: file,
+          catalog: allNames,
+        );
+
+        items = aiItems
+            .map((p) => _OcrLineItem(
+                  rawText: 'Gemini AI Verified',
+                  productName: p.productName,
+                  quantity: p.quantity,
+                  costPrice: p.costPrice,
+                  confirmed: true,
+                ))
+            .toList();
+        usedAi = true;
+      } catch (aiErr) {
+        debugPrint('[ReceiptScan] AI Scan failed, falling back to offline ML Kit: $aiErr');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('AI proxy unavailable — switched to offline reader.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    }
+
+    // 2. Offline Fallback (Google ML Kit + Regex/Fuzzy Parser)
+    if (!usedAi) {
+      setState(() => _scanStatusText = 'Reading receipt with offline OCR…');
+      try {
+        final inputImage = InputImage.fromFile(file);
+        final recognized = await _textRecognizer.processImage(inputImage);
+        final parser = ReceiptOcrParser(customProducts: existingProducts);
+        final parsedItems = parser.parseRecognizedText(recognized);
+        items = parsedItems
+            .map((p) => _OcrLineItem(
+                  rawText: p.rawText,
+                  productName: p.productName,
+                  quantity: p.quantity,
+                  costPrice: p.costPrice,
+                  confirmed: true,
+                ))
+            .toList();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Offline OCR error: $e')),
+          );
+        }
+      }
+    }
+
+    if (mounted) {
       setState(() {
         _lineItems = items;
         _isScanning = false;
         _showReview = true;
+        _scanEngine = usedAi ? 'Gemini 1.5 Flash Vision' : 'Offline ML Kit';
       });
-    } catch (e) {
-      setState(() => _isScanning = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('OCR error: $e')),
-        );
-      }
     }
   }
 
@@ -367,6 +434,183 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
       ),
     );
   }
+
+  void _showAiSettingsDialog() {
+    final currentUrl = ref.read(receiptAiProxyUrlProvider);
+    final urlCtrl = TextEditingController(text: currentUrl);
+    bool isTesting = false;
+    String? testResult;
+    bool? testSuccess;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Gemini AI Scanner'),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: const Text(
+                      'Uses Gemini 1.5 Flash Vision through your secure Cloudflare Worker proxy. Your API key is 100% hidden and safe from APK decompilation.',
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontSize: 12,
+                        color: AppColors.textPrimary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Cloudflare Worker Proxy URL:',
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: urlCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'https://issa-receipt-scanner.<subdomain>.workers.dev',
+                      hintStyle: const TextStyle(fontSize: 12),
+                      prefixIcon: const Icon(Icons.link_rounded),
+                      isDense: true,
+                      suffixIcon: urlCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                urlCtrl.clear();
+                                setDialogState(() {});
+                              },
+                            )
+                          : null,
+                    ),
+                    keyboardType: TextInputType.url,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Test Connection Button
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: isTesting || urlCtrl.text.trim().isEmpty
+                            ? null
+                            : () async {
+                                setDialogState(() {
+                                  isTesting = true;
+                                  testResult = null;
+                                  testSuccess = null;
+                                });
+                                final ok = await ReceiptAiService.instance
+                                    .testProxyConnection(urlCtrl.text.trim());
+                                setDialogState(() {
+                                  isTesting = false;
+                                  testSuccess = ok;
+                                  testResult = ok
+                                      ? 'Connected to Cloudflare Worker!'
+                                      : 'Could not connect. Check the URL.';
+                                });
+                              },
+                        icon: isTesting
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : const Icon(Icons.wifi_rounded, size: 16),
+                        label: const Text('Test Connection',
+                            style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (testResult != null)
+                        Expanded(
+                          child: Text(
+                            testResult!,
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: testSuccess == true
+                                  ? AppColors.success
+                                  : AppColors.error,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Info box
+                  const Text(
+                    'Note: If this URL is left empty, the scanner will simply use the on-device offline reader (Google ML Kit).',
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final newUrl = urlCtrl.text.trim();
+                await ref
+                    .read(receiptAiProxyUrlProvider.notifier)
+                    .setUrl(newUrl);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(newUrl.isNotEmpty
+                          ? 'Gemini AI Proxy URL saved!'
+                          : 'AI Proxy removed — using offline reader.'),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                }
+              },
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Scan body ─────────────────────────────────────────────────────────────────
@@ -375,12 +619,18 @@ class _ScanBody extends StatelessWidget {
   const _ScanBody({
     required this.imageFile,
     required this.isScanning,
+    required this.scanStatusText,
+    required this.hasAiConfigured,
+    required this.onConfigureAi,
     required this.onPickCamera,
     required this.onPickGallery,
   });
 
   final File? imageFile;
   final bool isScanning;
+  final String scanStatusText;
+  final bool hasAiConfigured;
+  final VoidCallback onConfigureAi;
   final VoidCallback onPickCamera;
   final VoidCallback onPickGallery;
 
@@ -390,6 +640,55 @@ class _ScanBody extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
+          // AI Status Badge (Tap to configure)
+          GestureDetector(
+            onTap: onConfigureAi,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: hasAiConfigured
+                    ? AppColors.primary.withAlpha(20)
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: hasAiConfigured
+                      ? AppColors.primary.withAlpha(80)
+                      : AppColors.divider,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hasAiConfigured
+                        ? Icons.auto_awesome_rounded
+                        : Icons.tune_rounded,
+                    size: 15,
+                    color: hasAiConfigured
+                        ? AppColors.primaryDeep
+                        : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    hasAiConfigured
+                        ? '✨ Gemini 1.5 Flash AI Active'
+                        : '⚡ Offline Reader (Tap to setup AI)',
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: hasAiConfigured
+                          ? AppColors.primaryDeep
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // Preview area
           Expanded(
             child: Container(
@@ -397,22 +696,22 @@ class _ScanBody extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.accentLight,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: AppColors.accent, width: 2),
+                border: Border.all(color: AppColors.accent, width: 2),
               ),
               child: isScanning
-                  ? const Center(
+                  ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
                           Text(
-                            'Scanning receipt…',
-                            style: TextStyle(
+                            scanStatusText,
+                            style: const TextStyle(
                               fontFamily: 'Nunito',
                               color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
                             ),
                           ),
                         ],
@@ -421,8 +720,8 @@ class _ScanBody extends StatelessWidget {
                   : imageFile != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(18),
-                          child: Image.file(imageFile!,
-                              fit: BoxFit.contain),
+                          child:
+                              Image.file(imageFile!, fit: BoxFit.contain),
                         )
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -481,6 +780,7 @@ class _ScanBody extends StatelessWidget {
 class _ReviewBody extends StatelessWidget {
   const _ReviewBody({
     required this.items,
+    required this.scanEngine,
     required this.onItemChanged,
     required this.onItemDeleted,
     required this.onAddItem,
@@ -489,6 +789,7 @@ class _ReviewBody extends StatelessWidget {
   });
 
   final List<_OcrLineItem> items;
+  final String scanEngine;
   final void Function(int, _OcrLineItem) onItemChanged;
   final void Function(int) onItemDeleted;
   final VoidCallback onAddItem;
@@ -501,28 +802,45 @@ class _ReviewBody extends StatelessWidget {
 
     return Column(
       children: [
-        // Info banner
+        // Info banner with Engine indicator
         Container(
           margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.primary.withAlpha(26),
+            color: scanEngine.contains('Gemini')
+                ? Colors.purple.withAlpha(20)
+                : AppColors.primary.withAlpha(20),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primary.withAlpha(77)),
+            border: Border.all(
+              color: scanEngine.contains('Gemini')
+                  ? Colors.purple.withAlpha(80)
+                  : AppColors.primary.withAlpha(77),
+            ),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.info_outline_rounded,
-                  color: AppColors.primaryDeep, size: 18),
-              SizedBox(width: 10),
+              Icon(
+                scanEngine.contains('Gemini')
+                    ? Icons.auto_awesome_rounded
+                    : Icons.info_outline_rounded,
+                color: scanEngine.contains('Gemini')
+                    ? Colors.purple.shade700
+                    : AppColors.primaryDeep,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Review each item carefully. Edit and check items before confirming. Nothing is saved until you tap "Commit Confirmed Items".',
+                  scanEngine.contains('Gemini')
+                      ? 'AI Vision Verified (Gemini 1.5 Flash). Review & confirm items below.'
+                      : 'Review each item carefully. Nothing is saved until you tap "Commit Confirmed Items".',
                   style: TextStyle(
                     fontFamily: 'Nunito',
                     fontSize: 12,
-                    color: AppColors.primaryDeep,
-                    fontWeight: FontWeight.w500,
+                    color: scanEngine.contains('Gemini')
+                        ? Colors.purple.shade900
+                        : AppColors.primaryDeep,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
