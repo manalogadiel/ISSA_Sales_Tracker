@@ -115,10 +115,10 @@ EXTRACTION RULES:
 
       /* 3. Call Gemini API (tries active flash vision models) */
       const candidateModels = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-flash-latest",
+        "gemini-3.5-flash-lite",
       ];
 
       const geminiPayload = {
@@ -142,6 +142,7 @@ EXTRACTION RULES:
       };
 
       let geminiResponse = null;
+      let successfulModel = null;
       let modelErrors = [];
 
       for (const model of candidateModels) {
@@ -154,12 +155,22 @@ EXTRACTION RULES:
 
         if (resp.ok) {
           geminiResponse = resp;
+          successfulModel = model;
           break;
         } else {
           const errText = await resp.text();
           modelErrors.push({ model, status: resp.status, error: errText });
           if (resp.status === 404) {
             continue;
+          } else if (resp.status === 429) {
+            /* Quota exhausted or prepayment credit depleted */
+            return new Response(
+              JSON.stringify({
+                error: `Gemini Quota Exceeded (429): Credits depleted or rate limit hit.`,
+                details: errText,
+              }),
+              { status: 429, headers: corsHeaders }
+            );
           } else if (resp.status === 401 || resp.status === 403) {
             /* Invalid API key or permission denied */
             return new Response(
@@ -210,7 +221,7 @@ EXTRACTION RULES:
       return new Response(
         JSON.stringify({
           success: true,
-          model: "gemini-1.5-flash",
+          model: successfulModel || "gemini-3.6-flash",
           items: parsedItems,
         }),
         { status: 200, headers: corsHeaders }
