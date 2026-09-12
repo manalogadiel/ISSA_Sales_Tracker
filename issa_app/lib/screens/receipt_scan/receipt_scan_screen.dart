@@ -41,8 +41,8 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
   bool _isCommitting = false;
   List<_OcrLineItem> _lineItems = [];
   bool _showReview = false;
-  String _scanStatusText = 'Scanning receipt…';
-  String _scanEngine = 'Offline ML Kit';
+  String _scanStatusText = 'Analyzing…';
+  String _scanEngine = 'Offline';
 
   final _picker = ImagePicker();
   final _textRecognizer =
@@ -64,10 +64,10 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
         actions: [
           IconButton(
             icon: Icon(
-              hasAi ? Icons.auto_awesome_rounded : Icons.tune_rounded,
+              hasAi ? Icons.cloud_done_rounded : Icons.tune_rounded,
               color: hasAi ? AppColors.primary : AppColors.textSecondary,
             ),
-            tooltip: hasAi ? 'Gemini AI Active' : 'Configure Gemini AI',
+            tooltip: 'Scanner Settings',
             onPressed: _showAiSettingsDialog,
           ),
           if (_showReview)
@@ -109,7 +109,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
       _lineItems = [];
       _showReview = false;
       _isScanning = false;
-      _scanStatusText = 'Scanning receipt…';
+      _scanStatusText = 'Analyzing…';
     });
   }
 
@@ -122,7 +122,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
     setState(() {
       _imageFile = file;
       _isScanning = true;
-      _scanStatusText = 'Analyzing receipt…';
+      _scanStatusText = 'Analyzing…';
     });
 
     final existingProducts =
@@ -138,9 +138,9 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
     List<_OcrLineItem> items = [];
     bool usedAi = false;
 
-    // 1. Try Gemini Vision AI via Cloudflare Worker Proxy (if configured)
+    // 1. Try cloud AI proxy (if configured)
     if (ReceiptAiService.instance.hasProxyConfigured) {
-      setState(() => _scanStatusText = 'Analyzing with Gemini 1.5 Flash AI…');
+      setState(() => _scanStatusText = 'Analyzing…');
       try {
         final aiItems = await ReceiptAiService.instance.scanWithAi(
           imageFile: file,
@@ -149,7 +149,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
 
         items = aiItems
             .map((p) => _OcrLineItem(
-                  rawText: 'Gemini AI Verified',
+                  rawText: '',
                   productName: p.productName,
                   quantity: p.quantity,
                   costPrice: p.costPrice,
@@ -158,11 +158,11 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
             .toList();
         usedAi = true;
       } catch (aiErr) {
-        debugPrint('[ReceiptScan] AI Scan failed, falling back to offline ML Kit: $aiErr');
+        debugPrint('[ReceiptScan] Cloud AI Scan failed, falling back to offline reader: $aiErr');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('AI proxy unavailable — switched to offline reader.'),
+              content: Text('Cloud scan unavailable — switched to offline reader.'),
               duration: Duration(seconds: 3),
             ),
           );
@@ -172,7 +172,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
 
     // 2. Offline Fallback (Google ML Kit + Regex/Fuzzy Parser)
     if (!usedAi) {
-      setState(() => _scanStatusText = 'Reading receipt with offline OCR…');
+      setState(() => _scanStatusText = 'Analyzing…');
       try {
         final inputImage = InputImage.fromFile(file);
         final recognized = await _textRecognizer.processImage(inputImage);
@@ -201,7 +201,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
         _lineItems = items;
         _isScanning = false;
         _showReview = true;
-        _scanEngine = usedAi ? 'Gemini 1.5 Flash Vision' : 'Offline ML Kit';
+        _scanEngine = usedAi ? 'Cloud' : 'Offline';
       });
     }
   }
@@ -448,9 +448,9 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
+              Icon(Icons.cloud_sync_rounded, color: AppColors.primary),
               SizedBox(width: 8),
-              Text('Gemini AI Scanner'),
+              Text('Cloud Scanner Setup'),
             ],
           ),
           content: SizedBox(
@@ -468,7 +468,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
                       border: Border.all(color: AppColors.divider),
                     ),
                     child: const Text(
-                      'Uses Gemini 1.5 Flash Vision through your secure Cloudflare Worker proxy. Your API key is 100% hidden and safe from APK decompilation.',
+                      'Connects through your secure Cloudflare Worker proxy to accurately extract products and prices from receipts. Your API key remains secure and hidden.',
                       style: TextStyle(
                         fontFamily: 'Nunito',
                         fontSize: 12,
@@ -640,55 +640,6 @@ class _ScanBody extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // AI Status Badge (Tap to configure)
-          GestureDetector(
-            onTap: onConfigureAi,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: hasAiConfigured
-                    ? AppColors.primary.withAlpha(20)
-                    : AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: hasAiConfigured
-                      ? AppColors.primary.withAlpha(80)
-                      : AppColors.divider,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    hasAiConfigured
-                        ? Icons.auto_awesome_rounded
-                        : Icons.tune_rounded,
-                    size: 15,
-                    color: hasAiConfigured
-                        ? AppColors.primaryDeep
-                        : AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    hasAiConfigured
-                        ? '✨ Gemini 1.5 Flash AI Active'
-                        : '⚡ Offline Reader (Tap to setup AI)',
-                    style: TextStyle(
-                      fontFamily: 'Nunito',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: hasAiConfigured
-                          ? AppColors.primaryDeep
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
           // Preview area
           Expanded(
             child: Container(
@@ -699,15 +650,15 @@ class _ScanBody extends StatelessWidget {
                 border: Border.all(color: AppColors.accent, width: 2),
               ),
               child: isScanning
-                  ? Center(
+                  ? const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const CircularProgressIndicator(),
-                          const SizedBox(height: 16),
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
                           Text(
-                            scanStatusText,
-                            style: const TextStyle(
+                            'Analyzing…',
+                            style: TextStyle(
                               fontFamily: 'Nunito',
                               color: AppColors.textSecondary,
                               fontWeight: FontWeight.w600,
@@ -802,44 +753,32 @@ class _ReviewBody extends StatelessWidget {
 
     return Column(
       children: [
-        // Info banner with Engine indicator
+        // Info banner
         Container(
           margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: scanEngine.contains('Gemini')
-                ? Colors.purple.withAlpha(20)
-                : AppColors.primary.withAlpha(20),
+            color: AppColors.primary.withAlpha(20),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: scanEngine.contains('Gemini')
-                  ? Colors.purple.withAlpha(80)
-                  : AppColors.primary.withAlpha(77),
+              color: AppColors.primary.withAlpha(77),
             ),
           ),
-          child: Row(
+          child: const Row(
             children: [
               Icon(
-                scanEngine.contains('Gemini')
-                    ? Icons.auto_awesome_rounded
-                    : Icons.info_outline_rounded,
-                color: scanEngine.contains('Gemini')
-                    ? Colors.purple.shade700
-                    : AppColors.primaryDeep,
+                Icons.info_outline_rounded,
+                color: AppColors.primaryDeep,
                 size: 18,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  scanEngine.contains('Gemini')
-                      ? 'AI Vision Verified (Gemini 1.5 Flash). Review & confirm items below.'
-                      : 'Review each item carefully. Nothing is saved until you tap "Commit Confirmed Items".',
+                  'Review each item carefully. Nothing is saved until you tap "Commit Confirmed Items".',
                   style: TextStyle(
                     fontFamily: 'Nunito',
                     fontSize: 12,
-                    color: scanEngine.contains('Gemini')
-                        ? Colors.purple.shade900
-                        : AppColors.primaryDeep,
+                    color: AppColors.primaryDeep,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1045,19 +984,22 @@ class _ReviewItemCardState extends State<_ReviewItemCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Raw OCR hint
-            Text(
-              'OCR: "${item.rawText}"',
-              style: const TextStyle(
-                fontFamily: 'Nunito',
-                fontSize: 11,
-                color: AppColors.textHint,
-                fontStyle: FontStyle.italic,
+            // Raw OCR hint (only shown when meaningful raw text exists)
+            if (item.rawText.trim().isNotEmpty &&
+                item.rawText != 'Gemini AI Verified') ...[
+              Text(
+                'OCR: "${item.rawText}"',
+                style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 11,
+                  color: AppColors.textHint,
+                  fontStyle: FontStyle.italic,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 10),
+            ],
 
             // Fields
             TextField(
