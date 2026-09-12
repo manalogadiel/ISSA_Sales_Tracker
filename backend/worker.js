@@ -86,16 +86,16 @@ export default {
       const catalogListStr = catalog.length > 0
         ? catalog.map((c) => `- ${c}`).join("\n")
         : [
-            "- Garlic Pork Longganisa",
-            "- Sweet Pork Longganisa",
-            "- Sweet & Spicy Pork Longganisa",
-            "- Chicken Longganisa",
-            "- Spicy Chicken Longganisa",
-            "- Chicken Hamonado",
-            "- Pork Tapa",
-            "- Pork Hamonado",
-            "- Pork Tocino",
-          ].join("\n");
+          "- Garlic Pork Longganisa",
+          "- Sweet Pork Longganisa",
+          "- Sweet & Spicy Pork Longganisa",
+          "- Chicken Longganisa",
+          "- Spicy Chicken Longganisa",
+          "- Chicken Hamonado",
+          "- Pork Tapa",
+          "- Pork Hamonado",
+          "- Pork Tocino",
+        ].join("\n");
 
       const promptText = `You are a precise receipt parser for a Philippine meat business.
 Analyze this receipt image and extract purchased meat products matching the ALLOWED CATALOG below.
@@ -113,12 +113,12 @@ EXTRACTION RULES:
 4. If an item on the receipt is NOT in the allowed catalog, do NOT include it.
 5. Return ONLY a valid JSON array of objects with keys: productName, quantity, costPrice.`;
 
-      /* 3. Call Gemini API (tries active flash vision models) */
+      /* 3. Call Gemini API (prioritize lowest-latency Flash-Lite models) */
       const candidateModels = [
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest",
         "gemini-3.6-flash",
         "gemini-3.5-flash",
-        "gemini-flash-latest",
-        "gemini-3.5-flash-lite",
       ];
 
       const geminiPayload = {
@@ -138,6 +138,10 @@ EXTRACTION RULES:
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.1,
+          maxOutputTokens: 800,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
         },
       };
 

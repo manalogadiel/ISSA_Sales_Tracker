@@ -115,7 +115,7 @@ class _ReceiptScanScreenState extends ConsumerState<ReceiptScanScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     final xFile = await _picker.pickImage(
-        source: source, imageQuality: 85, maxWidth: 1280, maxHeight: 1280);
+        source: source, imageQuality: 70, maxWidth: 960, maxHeight: 960);
     if (xFile == null) return;
 
     final file = File(xFile.path);
