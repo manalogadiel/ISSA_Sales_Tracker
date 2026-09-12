@@ -56,10 +56,10 @@ class ReceiptAiService {
         final content = await file.readAsString();
         final data = jsonDecode(content) as Map<String, dynamic>;
         final saved = (data['proxyUrl'] as String?)?.trim() ?? '';
-if (saved.isNotEmpty) {
-  _proxyUrl = saved;
-}
-
+        if (saved.isNotEmpty) {
+          _proxyUrl = saved;
+        }
+      }
     } catch (e) {
       debugPrint('[ReceiptAiService] Error loading config: $e');
     }
